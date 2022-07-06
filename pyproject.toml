@@ -7,7 +7,15 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<3.11"
+python = ">=3.8,<3.11"
+numpy = "^1.23.0"
+pyvista = "^0.34.2"
+h5py = "^3.7.0"
+"ruamel.yaml" = "^0.17.21"
+damask = "^3.0.0-alpha.6"
+plotly = "^5.9.0"
+vecmaths = "^0.1.6"
+nbformat = "^5.4.0"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
