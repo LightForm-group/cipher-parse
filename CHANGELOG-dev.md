@@ -5,6 +5,9 @@
 ### 🐛 Bug Fixes
 
 * test release
+* revert vers bump
+* release workflow
+* test release
 
 
 <a name="v0.1.0"></a>
