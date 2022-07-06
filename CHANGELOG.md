@@ -1,4 +1,12 @@
 
+<a name="v0.2.0"></a>
+## [v0.2.0](https://github.com/LightForm-group/cipher-parse/compare/v0.1.1...v0.2.0) - 2022.07.06
+
+### ✨ Features
+
+* update README
+
+
 <a name="v0.1.1"></a>
 ## [v0.1.1](https://github.com/LightForm-group/cipher-parse/compare/v0.1.0...v0.1.1) - 2022.07.06
 
