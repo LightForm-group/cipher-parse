@@ -171,6 +171,15 @@ jobs:
       - name: Build (for PyPI)
         run: poetry build
 
+      - run: mkdir release-artifacts
+
+      - uses: actions/download-artifact@v2
+        with:
+          path: release-artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
       - name: Release
         id: release
         uses: softprops/action-gh-release@v1
