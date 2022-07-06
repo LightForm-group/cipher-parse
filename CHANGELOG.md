@@ -1,4 +1,15 @@
 
+<a name="v0.2.2"></a>
+## [v0.2.2](https://github.com/LightForm-group/cipher-parse/compare/v0.2.1...v0.2.2) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* again workflow
+* workflow
+* update workflow [skip ci]
+* workflows add reqs.txt
+
+
 <a name="v0.2.1"></a>
 ## [v0.2.1](https://github.com/LightForm-group/cipher-parse/compare/v0.2.0...v0.2.1) - 2022.07.06
 
