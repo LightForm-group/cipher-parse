@@ -188,8 +188,8 @@ jobs:
           tag_name: ${{ needs.bump-version.outputs.new_tag_name }}
           prerelease: ${{ github.event.pull_request.base.ref == 'develop' }}
 
-      - name: Publish (to https://test.pypi.org/legacy/)
+      - name: Publish (to https://upload.pypi.org/legacy/)
         run: |
-          poetry config repositories.pypi https://test.pypi.org/legacy/
-          poetry config pypi-token.pypi ${{ secrets.TEST_PYPI_CIPHER_PARSE }}
+          poetry config repositories.pypi https://upload.pypi.org/legacy/
+          poetry config pypi-token.pypi ${{ secrets.PYPI_CIPHER_PARSE }}
           poetry publish --repository pypi
