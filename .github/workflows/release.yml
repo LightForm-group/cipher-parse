@@ -43,6 +43,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION_BUMP }}
 
+      - name: Cache the virtualenv
+        uses: actions/cache@v2
+        with:
+          path: ./.venv
+          key: venv-release-${{ hashFiles('**/poetry.lock') }}
+
       - name: Get git-chglog executable
         run: |
           wget https://github.com/git-chglog/git-chglog/releases/download/v0.15.0/git-chglog_0.15.0_linux_amd64.tar.gz
@@ -81,6 +87,22 @@ jobs:
               files=['pyproject.toml', 'cipher_parse/_version.py'],
           )"
           cz bump
+
+      - name: Install poetry
+        run: python -m pip install poetry==1.1.11
+
+      - name: Configure poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Write requirements.txt for binder
+        run: |
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
+          cur_tag=${{ env.cur_tag }}
+          new_version="${cur_tag:1}"
+          echo "cipher-parse==${new_version}" >> requirements.txt
 
       - name: Get new tag
         id: get_new_tag
