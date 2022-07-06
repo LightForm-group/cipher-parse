@@ -16,6 +16,7 @@ damask = "^3.0.0-alpha.6"
 plotly = "^5.9.0"
 vecmaths = "^0.1.6"
 nbformat = "^5.4.0"
+itkwidgets = ">=0.25.2"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
