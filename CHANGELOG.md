@@ -1,4 +1,16 @@
 
+<a name="v0.2.1"></a>
+## [v0.2.1](https://github.com/LightForm-group/cipher-parse/compare/v0.2.0...v0.2.1) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* remove hashes from reqs.txt
+
+### 👷 Build changes
+
+* add poetry exported req. [skip release]
+
+
 <a name="v0.2.0"></a>
 ## [v0.2.0](https://github.com/LightForm-group/cipher-parse/compare/v0.1.1...v0.2.0) - 2022.07.06
 
