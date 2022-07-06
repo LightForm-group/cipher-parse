@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "cipher-parse"
+version = "0.1.0"
+description = "Pre- and post-processing for the phase-field code CIPHER."
+authors = ["aplowman <adam.plowman@manchester.ac.uk>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.7,<3.11"
+
+[tool.poetry.dev-dependencies]
+pylint = "^2.12.2"
+ipykernel = "^6.6.1"
+pytest = "^6.2.5"
+commitizen = "^2.20.3"
+pre-commit = "^2.16.0"
+Sphinx = "^4.4.0"
+pydata-sphinx-theme = "^0.8.0"
+sphinx-jinja = "^2.0.1"
+sphinx-copybutton = "^0.5.0"
+black = "^22.3.0"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+version_files = [ 
+    "pyproject.toml:version",
+    "matflow/_version.py"
+]
+bump_message = "bump: $current_version → $new_version [skip ci]"
+
+[tool.black]
+line-length = 90
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
