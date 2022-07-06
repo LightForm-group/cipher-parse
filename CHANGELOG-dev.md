@@ -1,4 +1,12 @@
 
+<a name="v0.2.3a5"></a>
+## [v0.2.3a5](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a4...v0.2.3a5) - 2022.07.06
+
+### 👷 Build changes
+
+* add itkwidgets
+
+
 <a name="v0.2.3a4"></a>
 ## [v0.2.3a4](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a3...v0.2.3a4) - 2022.07.06
 
