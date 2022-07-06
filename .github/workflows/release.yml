@@ -103,6 +103,7 @@ jobs:
           cur_tag=${{ env.cur_tag }}
           new_version="${cur_tag:1}"
           echo "cipher-parse==${new_version}" >> requirements.txt
+          git add requirements.txt
 
       - name: Get new tag
         id: get_new_tag
