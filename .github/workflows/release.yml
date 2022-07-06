@@ -110,7 +110,7 @@ jobs:
           poetry export -f requirements.txt --output requirements.txt --without-hashes
           new_tag=${{ env.new_tag }}
           new_version="${new_tag:1}"
-          echo cipher-parse==${new_version}; python_version >= "3.8" >> requirements.txt
+          echo 'cipher-parse==${new_version}; python_version >= "3.8"' >> requirements.txt
           git add requirements.txt
 
       - name: Generate CHANGELOG (stable release)
