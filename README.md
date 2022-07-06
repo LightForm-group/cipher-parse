@@ -7,5 +7,3 @@ cipher-parse was developed using funding from the [LightForm](https://lightform.
 
 
 <img src="https://lightform-group.github.io/wiki/assets/images/site/lightform-logo.png" width="150"/>
-
-TEST RELEASE PR
