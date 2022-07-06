@@ -111,7 +111,7 @@ jobs:
           new_tag=${{ env.new_tag }}
           new_version="${new_tag:1}"
           echo "cipher-parse==${new_version}; python_version >= \"3.8\"" >> .binder/requirements.txt
-          git add requirements.txt
+          git add .binder/requirements.txt
 
       - name: Generate CHANGELOG (stable release)
         if: github.event.pull_request.base.ref == 'main'
