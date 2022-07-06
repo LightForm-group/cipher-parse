@@ -97,13 +97,6 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: Write requirements.txt for binder
-        run: |
-          poetry export -f requirements.txt --output requirements.txt --without-hashes
-          cur_tag=${{ env.cur_tag }}
-          new_version="${cur_tag:1}"
-          echo "cipher-parse==${new_version}" >> requirements.txt
-
       - name: Get new tag
         id: get_new_tag
         run: |
@@ -111,6 +104,14 @@ jobs:
           echo "NEW_TAG is: $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> $GITHUB_ENV
           echo "::set-output name=new_tag_name::$NEW_TAG"
+
+      - name: Write requirements.txt for binder
+        run: |
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
+          new_tag=${{ env.new_tag }}
+          new_version="${new_tag:1}"
+          echo "cipher-parse==${new_version}; python_version >= \"3.8\"" >> requirements.txt
+          git add requirements.txt
 
       - name: Generate CHANGELOG (stable release)
         if: github.event.pull_request.base.ref == 'main'
