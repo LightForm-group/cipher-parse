@@ -1,4 +1,12 @@
 
+<a name="v0.2.3a7"></a>
+## [v0.2.3a7](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a6...v0.2.3a7) - 2022.07.10
+
+### 🐛 Bug Fixes
+
+* release workflow on compatible py vers
+
+
 <a name="v0.2.3a6"></a>
 ## [v0.2.3a6](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a5...v0.2.3a6) - 2022.07.10
 

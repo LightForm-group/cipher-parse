@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cipher-parse"
-version = "0.2.3a6"
+version = "0.2.3a7"
 description = "Pre- and post-processing for the phase-field code CIPHER."
 authors = ["aplowman <adam.plowman@manchester.ac.uk>"]
 license = "MIT"
@@ -36,7 +36,7 @@ black = "^22.3.0"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.2.3a6"
+version = "0.2.3a7"
 tag_format = "v$version"
 version_files = [ 
     "pyproject.toml:version",
