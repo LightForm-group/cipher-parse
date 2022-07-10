@@ -2,8 +2,8 @@ name: release
 concurrency: release
 
 env:
-  PYTHON_VERSION_BUMP: 3.9
-  PYTHON_VERSION_RELEASE: 3.9
+  PYTHON_VERSION_BUMP: 3.8
+  PYTHON_VERSION_RELEASE: 3.8
 
 on:
   pull_request_target:
