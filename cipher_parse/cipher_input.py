@@ -1,4 +1,5 @@
 import copy
+import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, List, Union, Tuple, Dict
@@ -87,14 +88,45 @@ class InterfaceDefinition:
         self.index = None  # assigned by parent CIPHERGeometry
 
         self.properties = properties
-        self.materials = materials
-        self.phase_types = phase_types
+        self.materials = tuple(materials) if materials else None
+        self.phase_types = tuple(phase_types) if phase_types else None
         self.type_label = type_label
         self.type_fraction = type_fraction
         self.phase_pairs = phase_pairs
         self.metadata = metadata
 
         self._validate()
+
+    def to_JSON(self):
+        data = {
+            "properties": self.properties,
+            # "materials": self.materials,
+            "phase_types": list(self.phase_types),
+            "type_label": self.type_label,
+            "type_fraction": self.type_fraction,
+            "phase_pairs": self.phase_pairs.tolist() if self.is_phase_pairs_set else None,
+            "metadata": (
+                {k: v.tolist() for k, v in self.metadata} if self.metadata else None
+            ),
+        }
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data = {
+            "properties": data["properties"],
+            # "materials": data["materials"],
+            "phase_types": tuple(data["phase_types"]),
+            "type_label": data["type_label"],
+            "type_fraction": data["type_fraction"],
+            "phase_pairs": np.array(data["phase_pairs"]) if data["phase_pairs"] else None,
+            "metadata": (
+                {k: np.array(v) for k, v in data["metadata"].items()}
+                if data["metadata"]
+                else None
+            ),
+        }
+        return cls(**data)
 
     @property
     def is_phase_pairs_set(self):
@@ -268,6 +300,27 @@ class MaterialDefinition:
         for i in self.phase_types:
             i._material = self
 
+    def to_JSON(self):
+        data = {
+            "name": self.name,
+            "properties": self.properties,
+            # "target_volume_fraction": self.target_volume_fraction,
+            "phase_types": [i.to_JSON() for i in self.phase_types],
+        }
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data = {
+            "name": data["name"],
+            "properties": data["properties"],
+            # "target_volume_fraction": data["target_volume_fraction"],
+            "phase_types": [
+                PhaseTypeDefinition.from_JSON(i) for i in data["phase_types"]
+            ],
+        }
+        return cls(**data)
+
     @property
     def geometry(self):
         return self._geometry
@@ -363,6 +416,29 @@ class PhaseTypeDefinition:
     def name(self):
         return self.material.name + (f"-{self.type_label}" if self.type_label else "")
 
+    def to_JSON(self):
+        data = {
+            "type_label": self.type_label,
+            # "target_type_fraction": self.target_type_fraction,
+            "phases": self.phases.tolist(),
+            "orientations": self.orientations.tolist()
+            if self.orientations is not None
+            else None,
+        }
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data = {
+            "type_label": data["type_label"],
+            # "target_type_fraction": data["target_type_fraction"],
+            "phases": np.array(data["phases"]),
+            "orientations": np.array(data["orientations"])
+            if data["orientations"]
+            else None,
+        }
+        return cls(**data)
+
 
 class CIPHERGeometry:
     def __init__(
@@ -387,9 +463,10 @@ class CIPHERGeometry:
 
         self.voxel_map = voxel_map
         self.voxel_phase = voxel_phase
-        self.seeds = seeds
+        self.seeds = np.asarray(seeds)
         self.materials = materials
         self.interfaces = interfaces
+        self.random_seed = random_seed
         self.size = np.asarray(size)
 
         for i in self.materials:
@@ -440,6 +517,29 @@ class CIPHERGeometry:
                 f"Multiple interfaces have the same name (i.e. "
                 f"phase-type-pair and type-label combination)!"
             )
+
+    def to_JSON(self):
+        data = {
+            "materials": [i.to_JSON() for i in self.materials],
+            "interfaces": [i.to_JSON() for i in self.interfaces],
+            "size": self.size.tolist(),
+            "seeds": self.seeds.tolist(),
+            "voxel_phase": self.voxel_phase.tolist(),
+            "random_seed": self.random_seed,
+        }
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data = {
+            "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
+            "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
+            "size": np.array(data["size"]),
+            "seeds": np.array(data["seeds"]),
+            "voxel_phase": np.array(data["voxel_phase"]),
+            "random_seed": data["random_seed"],
+        }
+        return cls(**data)
 
     @property
     def interfaces(self):
@@ -827,6 +927,7 @@ class CIPHERGeometry:
                 is_periodic=True,
                 random_seed=random_seed,
             )
+            seeds = vor_map.seeds
 
         else:
             vor_map = DiscreteVoronoi.from_seeds(
@@ -1096,6 +1197,38 @@ class CIPHERInput:
                 f"{self.solution_parameters['initrefine']}), calculated to be: "
                 f"{check_grid_size}."
             )
+
+    def to_JSON_file(self, path):
+        data = self.to_JSON()
+        path = Path(path)
+        with Path(path).open("wt") as fp:
+            json.dump(data, fp)
+        return path
+
+    @classmethod
+    def from_JSON_file(cls, path):
+        with Path(path).open("rt") as fp:
+            data = json.load(fp)
+        return cls.from_JSON(data)
+
+    def to_JSON(self):
+        data = {
+            "geometry": self.geometry.to_JSON(),
+            "components": self.components,
+            "outputs": self.outputs,
+            "solution_parameters": self.solution_parameters,
+        }
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data = {
+            "geometry": CIPHERGeometry.from_JSON(data["geometry"]),
+            "components": data["components"],
+            "outputs": data["outputs"],
+            "solution_parameters": data["solution_parameters"],
+        }
+        return cls(**data)
 
     @classmethod
     def from_voronoi(

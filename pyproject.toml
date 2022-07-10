@@ -5,12 +5,16 @@ description = "Pre- and post-processing for the phase-field code CIPHER."
 authors = ["aplowman <adam.plowman@manchester.ac.uk>"]
 license = "MIT"
 readme = "README.md"
+include = [
+    "cipher_parse/example_data/dream3d/2D/synthetic_d3d.dream3d",
+    "cipher_parse/example_data/dream3d/3D/synthetic_d3d.dream3d",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.11"
 numpy = "^1.23.0"
 pyvista = "^0.34.2"
-h5py = "^3.7.0"
+h5py = "2.10.0"
 "ruamel.yaml" = "^0.17.21"
 damask = "^3.0.0-alpha.6"
 plotly = "^5.9.0"
