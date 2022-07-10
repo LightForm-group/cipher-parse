@@ -88,8 +88,8 @@ class InterfaceDefinition:
         self.index = None  # assigned by parent CIPHERGeometry
 
         self.properties = properties
-        self.materials = materials
-        self.phase_types = phase_types
+        self.materials = tuple(materials) if materials else None
+        self.phase_types = tuple(phase_types) if phase_types else None
         self.type_label = type_label
         self.type_fraction = type_fraction
         self.phase_pairs = phase_pairs
