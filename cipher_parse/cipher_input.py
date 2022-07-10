@@ -421,7 +421,9 @@ class PhaseTypeDefinition:
             "type_label": self.type_label,
             # "target_type_fraction": self.target_type_fraction,
             "phases": self.phases.tolist(),
-            "orientations": self.orientations.tolist() if self.orientations else None,
+            "orientations": self.orientations.tolist()
+            if self.orientations is not None
+            else None,
         }
         return data
 
