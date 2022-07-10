@@ -1,4 +1,81 @@
 
+<a name="v0.2.3a7"></a>
+## [v0.2.3a7](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a6...v0.2.3a7) - 2022.07.10
+
+### 🐛 Bug Fixes
+
+* release workflow on compatible py vers
+
+
+<a name="v0.2.3a6"></a>
+## [v0.2.3a6](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a5...v0.2.3a6) - 2022.07.10
+
+### ✨ Features
+
+* add to/from_JSON to CIPHERInput
+
+### 🐛 Bug Fixes
+
+* PhaseTypeDefinition.to_JSON w/ orientations
+* InterfaceDefinition mat/phase type tuple
+* add example data
+
+### 👷 Build changes
+
+* test on py3.8 only
+* update lock file
+* downgrade h5py dep for matflow
+
+
+<a name="v0.2.3a5"></a>
+## [v0.2.3a5](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a4...v0.2.3a5) - 2022.07.06
+
+### 👷 Build changes
+
+* add itkwidgets
+
+
+<a name="v0.2.3a4"></a>
+## [v0.2.3a4](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a3...v0.2.3a4) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* add apt.txt for binder
+
+
+<a name="v0.2.3a3"></a>
+## [v0.2.3a3](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a2...v0.2.3a3) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* simplify
+
+
+<a name="v0.2.3a2"></a>
+## [v0.2.3a2](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a1...v0.2.3a2) - 2022.07.06
+
+
+<a name="v0.2.3a1"></a>
+## [v0.2.3a1](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a0...v0.2.3a1) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* remove file [skip ci]
+* again
+
+
+<a name="v0.2.3a0"></a>
+## [v0.2.3a0](https://github.com/LightForm-group/cipher-parse/compare/v0.2.2...v0.2.3a0) - 2022.07.06
+
+### 🐛 Bug Fixes
+
+* workflow again [skip ci]
+
+
+<a name="v0.2.2"></a>
+## [v0.2.2](https://github.com/LightForm-group/cipher-parse/compare/v0.2.2a2...v0.2.2) - 2022.07.06
+
+
 <a name="v0.2.2a2"></a>
 ## [v0.2.2a2](https://github.com/LightForm-group/cipher-parse/compare/v0.2.2a1...v0.2.2a2) - 2022.07.06
 

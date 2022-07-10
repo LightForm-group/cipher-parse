@@ -1,4 +1,5 @@
 import json
+from importlib import resources
 from pathlib import Path
 import numpy as np
 from scipy.spatial import Voronoi, Delaunay
@@ -422,3 +423,17 @@ def read_shockley(theta, E_max, theta_max, degrees=True):
     E[theta > theta_max] = np.max(E[theta < theta_max])
 
     return E
+
+
+def get_example_data_path_dream3D_2D():
+    with resources.path(
+        "cipher_parse.example_data.dream3d.2D", "synthetic_d3d.dream3d"
+    ) as p:
+        return p
+
+
+def get_example_data_path_dream3D_3D():
+    with resources.path(
+        "cipher_parse.example_data.dream3d.3D", "synthetic_d3d.dream3d"
+    ) as p:
+        return p
