@@ -1,4 +1,24 @@
 
+<a name="v0.2.3a6"></a>
+## [v0.2.3a6](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a5...v0.2.3a6) - 2022.07.10
+
+### ✨ Features
+
+* add to/from_JSON to CIPHERInput
+
+### 🐛 Bug Fixes
+
+* PhaseTypeDefinition.to_JSON w/ orientations
+* InterfaceDefinition mat/phase type tuple
+* add example data
+
+### 👷 Build changes
+
+* test on py3.8 only
+* update lock file
+* downgrade h5py dep for matflow
+
+
 <a name="v0.2.3a5"></a>
 ## [v0.2.3a5](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a4...v0.2.3a5) - 2022.07.06
 
