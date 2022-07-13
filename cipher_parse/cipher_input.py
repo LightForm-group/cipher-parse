@@ -106,7 +106,9 @@ class InterfaceDefinition:
             "type_fraction": self.type_fraction,
             "phase_pairs": self.phase_pairs.tolist() if self.is_phase_pairs_set else None,
             "metadata": (
-                {k: v.tolist() for k, v in self.metadata} if self.metadata else None
+                {k: v.tolist() for k, v in self.metadata.items()}
+                if self.metadata
+                else None
             ),
         }
         return data
@@ -852,7 +854,10 @@ class CIPHERGeometry:
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         for idx in range(self.num_phases):
-            print(f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}")
+            print(
+                f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
+                flush=True,
+            )
             ori_i = all_oris[idx : idx + 1]
             other_oris = all_oris[idx + 1 :]
             if other_oris.size:
