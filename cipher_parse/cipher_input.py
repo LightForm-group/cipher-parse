@@ -106,7 +106,9 @@ class InterfaceDefinition:
             "type_fraction": self.type_fraction,
             "phase_pairs": self.phase_pairs.tolist() if self.is_phase_pairs_set else None,
             "metadata": (
-                {k: v.tolist() for k, v in self.metadata} if self.metadata else None
+                {k: v.tolist() for k, v in self.metadata.items()}
+                if self.metadata
+                else None
             ),
         }
         return data
