@@ -1,4 +1,17 @@
 
+<a name="v0.3.1a0"></a>
+## [v0.3.1a0](https://github.com/LightForm-group/cipher-parse/compare/v0.3.0...v0.3.1a0) - 2022.07.13
+
+### 🐛 Bug Fixes
+
+* flush print in get_misorientation_matrix
+* IntDefn to_JSON when metadata
+
+
+<a name="v0.3.0"></a>
+## [v0.3.0](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a7...v0.3.0) - 2022.07.10
+
+
 <a name="v0.2.3a7"></a>
 ## [v0.2.3a7](https://github.com/LightForm-group/cipher-parse/compare/v0.2.3a6...v0.2.3a7) - 2022.07.10
 
