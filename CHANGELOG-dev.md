@@ -1,4 +1,12 @@
 
+<a name="v0.3.1a1"></a>
+## [v0.3.1a1](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a0...v0.3.1a1) - 2022.07.14
+
+### ✨ Features
+
+* add keep_arrays bool to to_JSON methods
+
+
 <a name="v0.3.1a0"></a>
 ## [v0.3.1a0](https://github.com/LightForm-group/cipher-parse/compare/v0.3.0...v0.3.1a0) - 2022.07.13
 
