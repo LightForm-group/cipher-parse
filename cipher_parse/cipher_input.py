@@ -97,31 +97,32 @@ class InterfaceDefinition:
 
         self._validate()
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "properties": self.properties,
-            # "materials": self.materials,
             "phase_types": list(self.phase_types),
             "type_label": self.type_label,
             "type_fraction": self.type_fraction,
-            "phase_pairs": self.phase_pairs.tolist() if self.is_phase_pairs_set else None,
-            "metadata": (
-                {k: v.tolist() for k, v in self.metadata.items()}
-                if self.metadata
-                else None
-            ),
+            "phase_pairs": self.phase_pairs if self.is_phase_pairs_set else None,
+            "metadata": {k: v for k, v in (self.metadata or {}).items()} or None,
         }
+        if not keep_arrays:
+            if self.is_phase_pairs_set:
+                data["phase_pairs"] = data["phase_pairs"].tolist()
+            if self.metadata:
+                data["metadata"] = {k: v.tolist() for k, v in data["metadata"].items()}
         return data
 
     @classmethod
     def from_JSON(cls, data):
         data = {
             "properties": data["properties"],
-            # "materials": data["materials"],
             "phase_types": tuple(data["phase_types"]),
             "type_label": data["type_label"],
             "type_fraction": data["type_fraction"],
-            "phase_pairs": np.array(data["phase_pairs"]) if data["phase_pairs"] else None,
+            "phase_pairs": np.array(data["phase_pairs"])
+            if data["phase_pairs"] is not None
+            else None,
             "metadata": (
                 {k: np.array(v) for k, v in data["metadata"].items()}
                 if data["metadata"]
@@ -302,12 +303,11 @@ class MaterialDefinition:
         for i in self.phase_types:
             i._material = self
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "name": self.name,
             "properties": self.properties,
-            # "target_volume_fraction": self.target_volume_fraction,
-            "phase_types": [i.to_JSON() for i in self.phase_types],
+            "phase_types": [i.to_JSON(keep_arrays) for i in self.phase_types],
         }
         return data
 
@@ -316,7 +316,6 @@ class MaterialDefinition:
         data = {
             "name": data["name"],
             "properties": data["properties"],
-            # "target_volume_fraction": data["target_volume_fraction"],
             "phase_types": [
                 PhaseTypeDefinition.from_JSON(i) for i in data["phase_types"]
             ],
@@ -418,25 +417,26 @@ class PhaseTypeDefinition:
     def name(self):
         return self.material.name + (f"-{self.type_label}" if self.type_label else "")
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "type_label": self.type_label,
-            # "target_type_fraction": self.target_type_fraction,
-            "phases": self.phases.tolist(),
-            "orientations": self.orientations.tolist()
-            if self.orientations is not None
-            else None,
+            "phases": self.phases,
+            "orientations": self.orientations,
         }
+        if not keep_arrays:
+            data["phases"] = data["phases"].tolist()
+            if self.orientations is not None:
+                data["orientations"] = data["orientations"].tolist()
+
         return data
 
     @classmethod
     def from_JSON(cls, data):
         data = {
             "type_label": data["type_label"],
-            # "target_type_fraction": data["target_type_fraction"],
             "phases": np.array(data["phases"]),
             "orientations": np.array(data["orientations"])
-            if data["orientations"]
+            if data["orientations"] is not None
             else None,
         }
         return cls(**data)
@@ -520,15 +520,20 @@ class CIPHERGeometry:
                 f"phase-type-pair and type-label combination)!"
             )
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
-            "materials": [i.to_JSON() for i in self.materials],
-            "interfaces": [i.to_JSON() for i in self.interfaces],
-            "size": self.size.tolist(),
-            "seeds": self.seeds.tolist(),
-            "voxel_phase": self.voxel_phase.tolist(),
+            "materials": [i.to_JSON(keep_arrays) for i in self.materials],
+            "interfaces": [i.to_JSON(keep_arrays) for i in self.interfaces],
+            "size": self.size,
+            "seeds": self.seeds,
+            "voxel_phase": self.voxel_phase,
             "random_seed": self.random_seed,
         }
+        if not keep_arrays:
+            data["size"] = data["size"].tolist()
+            data["seeds"] = data["seeds"].tolist()
+            data["voxel_phase"] = data["voxel_phase"].tolist()
+
         return data
 
     @classmethod
@@ -581,6 +586,17 @@ class CIPHERGeometry:
         the specified phases of associated material."""
 
         for i in self.interfaces:
+
+            # assign materials as well as phase_types if materials not assigned to
+            # interface:
+            if not i.materials:
+                i_mats = []
+                # find which material each referenced phase type belongs to:
+                for j in i.phase_types:
+                    mat_j = [k.material.name for k in self.phase_types if k.name == j][0]
+                    i_mats.append(mat_j)
+                i.materials = tuple(i_mats)
+
             if i.phase_pairs.size:
                 mats_idx = np.sort([self.material_names.index(j) for j in i.materials])
                 phase_pairs_material = self.phase_material[i.phase_pairs]
@@ -1216,9 +1232,9 @@ class CIPHERInput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
-            "geometry": self.geometry.to_JSON(),
+            "geometry": self.geometry.to_JSON(keep_arrays),
             "components": self.components,
             "outputs": self.outputs,
             "solution_parameters": self.solution_parameters,
@@ -1658,5 +1674,6 @@ class CIPHERInput:
             )
 
         print("done!")
+        self.geometry._check_interface_phase_pairs()
         self.geometry._validate_interfaces()
         self.geometry._validate_interface_map()
