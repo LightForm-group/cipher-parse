@@ -12,6 +12,17 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 from damask import Orientation
 
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
+from cipher_parse.errors import (
+    GeometryDuplicateMaterialNameError,
+    GeometryExcessTargetVolumeFractionError,
+    GeometryMissingPhaseAssignmentError,
+    GeometryNonUnitTargetVolumeFractionError,
+    GeometryUnassignedPhasePairInterfaceError,
+    GeometryVoxelPhaseError,
+    MaterialPhaseTypeFractionError,
+    MaterialPhaseTypeLabelError,
+    MaterialPhaseTypePhasesMissingError,
+)
 from cipher_parse.voxel_map import VoxelMap
 from cipher_parse.utilities import set_by_path
 
@@ -251,10 +262,10 @@ class MaterialDefinition:
             if phase_types:
                 is_phases_given = [i.phases is not None for i in phase_types]
                 if any(is_phases_given) and sum(is_phases_given) != len(phase_types):
-                    raise ValueError(
+                    raise MaterialPhaseTypePhasesMissingError(
                         f"If specifying `phases` for a phase type for material "
                         f"{self.name!r}, `phases` must be specified for all phase types."
-                    )  # TODO: test raise
+                    )
 
         if phase_types is None:
             phase_types = [PhaseTypeDefinition(phases=phases)]
@@ -262,10 +273,10 @@ class MaterialDefinition:
         if len(phase_types) > 1:
             pt_labels = [i.type_label for i in phase_types]
             if len(set(pt_labels)) < len(pt_labels):
-                raise ValueError(
+                raise MaterialPhaseTypeLabelError(
                     f"Phase types belonging to the same material ({self.name!r}) must have "
                     f"distinct `type_label`s."
-                )  # TODO: test raise
+                )
 
         self.phase_types = phase_types
 
@@ -283,22 +294,22 @@ class MaterialDefinition:
             if num_unassigned_vol:
                 frac = (1.0 - assigned_vol) / num_unassigned_vol
                 if frac <= 0.0:
-                    raise ValueError(
+                    raise MaterialPhaseTypeFractionError(
                         f"All phase type target volume fractions must sum to one, but "
                         f"assigned target volume fractions sum to {assigned_vol} with "
                         f"{num_unassigned_vol} outstanding unassigned phase type volume "
                         f"fraction(s)."
-                    )  # TODO: test raise
+                    )
             for i in self.phase_types:
                 if i.target_type_fraction is None:
                     i.target_type_fraction = frac
 
             assigned_vol = sum(self.target_phase_type_fractions)
             if not np.isclose(assigned_vol, 1.0):
-                raise ValueError(
+                raise MaterialPhaseTypeFractionError(
                     f"All phase type target type fractions must sum to one, but target "
                     f"type fractions sum to {assigned_vol}."
-                )  # TODO: test raise
+                )
 
         for i in self.phase_types:
             i._material = self
@@ -487,14 +498,13 @@ class CIPHERGeometry:
         self._num_phases = all_phases.size
 
         if not np.all(all_phases == np.arange(self.num_phases)):
-            raise ValueError(
+            raise GeometryVoxelPhaseError(
                 "`voxel_phase` must be an array of consecutive integers starting from "
                 "zero."
             )
-            # TODO: test raise
 
         if len(set(self.material_names)) < self.num_materials:
-            raise ValueError(
+            raise GeometryDuplicateMaterialNameError(
                 f"Repeated material names exist in the materials definitions: "
                 f"{self.material_names!r}."
             )
@@ -571,12 +581,12 @@ class CIPHERGeometry:
         is_mixed = any(is_mat_phases) and any(is_mat_vol_frac)
 
         if is_mixed or (any(is_mat_phases) and not all(is_mat_phases)):
-            raise ValueError(
+            raise GeometryMissingPhaseAssignmentError(
                 f"Specify either: all phases explicitly (via the material definition "
                 f"`phases`, or the constituent phase type definition `phases`), or "
                 f"specify zero or more target volume fractions for the material "
                 f"definitions."
-            )  # TODO: test raise
+            )
 
         if not any(is_mat_phases):
             self._assign_phases_by_volume_fractions(is_mat_vol_frac, random_seed)
@@ -615,22 +625,22 @@ class CIPHERGeometry:
         if num_unassigned_vol:
             frac = (1.0 - assigned_vol) / num_unassigned_vol
             if frac <= 0.0:
-                raise ValueError(
+                raise GeometryExcessTargetVolumeFractionError(
                     f"All material target volume fractions must sum to one, but "
                     f"assigned target volume fractions sum to {assigned_vol} with "
                     f"{num_unassigned_vol} outstanding unassigned material volume "
                     f"fraction(s)."
-                )  # TODO: test raise
+                )
         for i in self.materials:
             if i.target_volume_fraction is None:
                 i.target_volume_fraction = frac
 
         assigned_vol = sum(self.target_material_volume_fractions)
         if not np.isclose(assigned_vol, 1.0):
-            raise ValueError(
+            raise GeometryNonUnitTargetVolumeFractionError(
                 f"All material target volume fractions must sum to one, but target "
                 f"volume fractions sum to {assigned_vol}."
-            )  # TODO: test raise
+            )
 
         # Now assign phases:
         rng = np.random.default_rng(seed=random_seed)
@@ -852,7 +862,7 @@ class CIPHERGeometry:
         int_is_nan = np.isnan(self.interface_map[int_map_indices])
         phase_idx_int_is_nan = np.vstack(int_map_indices)[:, int_is_nan]
         if phase_idx_int_is_nan.size:
-            raise RuntimeError(
+            raise GeometryUnassignedPhasePairInterfaceError(
                 f"The following phase-pairs have not been assigned an interface "
                 f"definition: {phase_idx_int_is_nan}."
             )
@@ -862,10 +872,15 @@ class CIPHERGeometry:
         misorientation matrix between all pairs."""
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
-        all_oris = []
+        all_oris = np.ones((self.num_phases, 4)) * np.nan
         for i in self.phase_types:
-            all_oris.extend(i.orientations)  # TODO: is this correct order of phases?
-        all_oris = np.vstack(all_oris)
+            all_oris[i.phases] = i.orientations
+
+        if np.any(np.isnan(all_oris)):
+            raise RuntimeError(
+                "Not all orientations are accounted for in the phase type definitions."
+            )
+
         all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
