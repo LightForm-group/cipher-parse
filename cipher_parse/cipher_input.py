@@ -872,10 +872,15 @@ class CIPHERGeometry:
         misorientation matrix between all pairs."""
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
-        all_oris = []
+        all_oris = np.ones((self.num_phases, 4)) * np.nan
         for i in self.phase_types:
-            all_oris.extend(i.orientations)  # TODO: is this correct order of phases?
-        all_oris = np.vstack(all_oris)
+            all_oris[i.phases] = i.orientations
+
+        if np.any(np.isnan(all_oris)):
+            raise RuntimeError(
+                "Not all orientations are accounted for in the phase type definitions."
+            )
+
         all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
