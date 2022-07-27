@@ -1,4 +1,12 @@
 
+<a name="v0.3.1a2"></a>
+## [v0.3.1a2](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a1...v0.3.1a2) - 2022.07.27
+
+### 🐛 Bug Fixes
+
+* get_misorientation_matrix orientation order
+
+
 <a name="v0.3.1a1"></a>
 ## [v0.3.1a1](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a0...v0.3.1a1) - 2022.07.14
 
