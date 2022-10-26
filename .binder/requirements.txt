@@ -1,1 +1,1 @@
-cipher-parse==0.3.1a3
+cipher-parse==0.3.1a2
