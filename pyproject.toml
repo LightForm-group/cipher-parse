@@ -22,6 +22,7 @@ vecmaths = "^0.1.6"
 nbformat = "^5.4.0"
 itkwidgets = ">=0.25.2"
 hickle = {version = "4.0.4", optional = true}
+matflow = {version = "^0.2.26", optional = true}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
@@ -37,6 +38,7 @@ black = "^22.3.0"
 
 [tool.poetry.extras]
 hickle = ["hickle"]
+matflow = ["hickle", "matflow"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
