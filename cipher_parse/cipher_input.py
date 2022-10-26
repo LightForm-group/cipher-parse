@@ -950,6 +950,7 @@ class CIPHERGeometry:
         seeds=None,
         num_phases=None,
         random_seed=None,
+        is_periodic=False,
     ):
 
         if sum(i is not None for i in (seeds, num_phases)) != 1:
@@ -960,7 +961,7 @@ class CIPHERGeometry:
                 num_regions=num_phases,
                 grid_size=grid_size,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
                 random_seed=random_seed,
             )
             seeds = vor_map.seeds
@@ -970,7 +971,7 @@ class CIPHERGeometry:
                 region_seeds=seeds,
                 grid_size=grid_size,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
             )
 
         return cls(
@@ -991,6 +992,7 @@ class CIPHERGeometry:
         grid_size,
         size,
         random_seed=None,
+        is_periodic=False,
     ):
         return cls.from_voronoi(
             interfaces=interfaces,
@@ -999,6 +1001,7 @@ class CIPHERGeometry:
             size=size,
             seeds=seeds,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
@@ -1010,6 +1013,7 @@ class CIPHERGeometry:
         grid_size,
         size,
         random_seed=None,
+        is_periodic=False,
     ):
         return cls.from_voronoi(
             interfaces=interfaces,
@@ -1018,6 +1022,7 @@ class CIPHERGeometry:
             size=size,
             num_phases=num_phases,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @property
@@ -1279,6 +1284,7 @@ class CIPHERInput:
         seeds=None,
         num_phases=None,
         random_seed=None,
+        is_periodic=False,
     ):
 
         geometry = CIPHERGeometry.from_voronoi(
@@ -1289,6 +1295,7 @@ class CIPHERInput:
             grid_size=grid_size,
             size=size,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
         inp = cls(
@@ -1311,6 +1318,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        is_periodic=False,
     ):
 
         return cls.from_voronoi(
@@ -1323,6 +1331,7 @@ class CIPHERInput:
             outputs=outputs,
             solution_parameters=solution_parameters,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
@@ -1337,6 +1346,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        is_periodic=False,
     ):
 
         return cls.from_voronoi(
@@ -1349,6 +1359,7 @@ class CIPHERInput:
             outputs=outputs,
             solution_parameters=solution_parameters,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
