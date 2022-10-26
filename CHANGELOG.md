@@ -1,4 +1,25 @@
 
+<a name="v0.4.0"></a>
+## [v0.4.0](https://github.com/LightForm-group/cipher-parse/compare/v0.3.0...v0.4.0) - 2022.10.26
+
+### ✨ Features
+
+* add util funcs for selecting subset of VTKs
+* add func parse_cipher_stdout
+* add keep_arrays bool to to_JSON methods
+
+### 🐛 Bug Fixes
+
+* get_misorientation_matrix orientation order
+* flush print in get_misorientation_matrix
+* IntDefn to_JSON when metadata
+* **build:** do not constrain poetry in release
+
+### 👷 Build changes
+
+* update deps
+
+
 <a name="v0.3.0"></a>
 ## [v0.3.0](https://github.com/LightForm-group/cipher-parse/compare/v0.2.2...v0.3.0) - 2022.07.10
 
