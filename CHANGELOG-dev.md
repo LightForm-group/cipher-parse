@@ -1,4 +1,21 @@
 
+<a name="v0.3.1a3"></a>
+## [v0.3.1a3](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a2...v0.3.1a3) - 2022.10.26
+
+### ✨ Features
+
+* add util funcs for selecting subset of VTKs
+* add func parse_cipher_stdout
+
+### 🐛 Bug Fixes
+
+* **build:** do not constrain poetry in release
+
+### 👷 Build changes
+
+* update deps
+
+
 <a name="v0.3.1a2"></a>
 ## [v0.3.1a2](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a1...v0.3.1a2) - 2022.07.27
 
