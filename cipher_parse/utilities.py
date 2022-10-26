@@ -1,6 +1,8 @@
 import json
 from importlib import resources
 from pathlib import Path
+from functools import reduce
+
 import numpy as np
 from scipy.spatial import Voronoi, Delaunay
 from plotly import graph_objects
@@ -437,3 +439,43 @@ def get_example_data_path_dream3D_3D():
         "cipher_parse.example_data.dream3d.3D", "synthetic_d3d.dream3d"
     ) as p:
         return p
+
+
+def factors(n, non_prime_only=False):
+    facs = set(
+        reduce(
+            list.__add__,
+            ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)
+        )
+    )
+    if non_prime_only:
+        facs = facs - {1, n}
+        
+    return facs
+
+def get_evenly_spaced_subset(lst, max_num):
+    """Get evenly spaced indices that include the initial and final elements
+    in a list. If the list is of length N and N - 1 is prime, then the final
+    spacing will be one larger than the other spacings."""
+    if max_num == 1:
+        idx = [0]
+    elif max_num == 2:
+        idx = [0, len(lst) - 1]
+    elif max_num >= len(lst):
+        idx = list(range(0, len(lst)))
+    else:
+        step_sizes = factors(len(lst) - 1, non_prime_only=True)
+        is_prime = False
+        if not step_sizes:
+            is_prime = True
+            step_sizes = factors(len(lst) - 2, non_prime_only=True)
+        step_sizes_num_steps = [
+            (i, ((len(lst) - (1 if not is_prime else 2)) / i) + 1)
+            for i in step_sizes
+        ]
+        valid = [i for i in step_sizes_num_steps if i[1] <= max_num]        
+        valid_max = max(valid, key=lambda x: x[1])
+        idx = list(range(0, len(lst), valid_max[0]))
+        if is_prime:
+            idx[-1] = len(lst) - 1
+    return idx

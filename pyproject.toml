@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cipher-parse"
-version = "0.3.0"
+version = "0.3.1a3"
 description = "Pre- and post-processing for the phase-field code CIPHER."
 authors = ["aplowman <adam.plowman@manchester.ac.uk>"]
 license = "MIT"
@@ -21,6 +21,7 @@ plotly = "^5.9.0"
 vecmaths = "^0.1.6"
 nbformat = "^5.4.0"
 itkwidgets = ">=0.25.2"
+hickle = {version = "4.0.4", optional = true}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
@@ -34,9 +35,12 @@ sphinx-jinja = "^2.0.1"
 sphinx-copybutton = "^0.5.0"
 black = "^22.3.0"
 
+[tool.poetry.extras]
+hickle = ["hickle"]
+
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.0"
+version = "0.3.1a3"
 tag_format = "v$version"
 version_files = [ 
     "pyproject.toml:version",

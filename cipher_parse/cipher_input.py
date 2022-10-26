@@ -12,6 +12,17 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 from damask import Orientation
 
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
+from cipher_parse.errors import (
+    GeometryDuplicateMaterialNameError,
+    GeometryExcessTargetVolumeFractionError,
+    GeometryMissingPhaseAssignmentError,
+    GeometryNonUnitTargetVolumeFractionError,
+    GeometryUnassignedPhasePairInterfaceError,
+    GeometryVoxelPhaseError,
+    MaterialPhaseTypeFractionError,
+    MaterialPhaseTypeLabelError,
+    MaterialPhaseTypePhasesMissingError,
+)
 from cipher_parse.voxel_map import VoxelMap
 from cipher_parse.utilities import set_by_path
 
@@ -97,29 +108,32 @@ class InterfaceDefinition:
 
         self._validate()
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "properties": self.properties,
-            # "materials": self.materials,
             "phase_types": list(self.phase_types),
             "type_label": self.type_label,
             "type_fraction": self.type_fraction,
-            "phase_pairs": self.phase_pairs.tolist() if self.is_phase_pairs_set else None,
-            "metadata": (
-                {k: v.tolist() for k, v in self.metadata} if self.metadata else None
-            ),
+            "phase_pairs": self.phase_pairs if self.is_phase_pairs_set else None,
+            "metadata": {k: v for k, v in (self.metadata or {}).items()} or None,
         }
+        if not keep_arrays:
+            if self.is_phase_pairs_set:
+                data["phase_pairs"] = data["phase_pairs"].tolist()
+            if self.metadata:
+                data["metadata"] = {k: v.tolist() for k, v in data["metadata"].items()}
         return data
 
     @classmethod
     def from_JSON(cls, data):
         data = {
             "properties": data["properties"],
-            # "materials": data["materials"],
             "phase_types": tuple(data["phase_types"]),
             "type_label": data["type_label"],
             "type_fraction": data["type_fraction"],
-            "phase_pairs": np.array(data["phase_pairs"]) if data["phase_pairs"] else None,
+            "phase_pairs": np.array(data["phase_pairs"])
+            if data["phase_pairs"] is not None
+            else None,
             "metadata": (
                 {k: np.array(v) for k, v in data["metadata"].items()}
                 if data["metadata"]
@@ -248,10 +262,10 @@ class MaterialDefinition:
             if phase_types:
                 is_phases_given = [i.phases is not None for i in phase_types]
                 if any(is_phases_given) and sum(is_phases_given) != len(phase_types):
-                    raise ValueError(
+                    raise MaterialPhaseTypePhasesMissingError(
                         f"If specifying `phases` for a phase type for material "
                         f"{self.name!r}, `phases` must be specified for all phase types."
-                    )  # TODO: test raise
+                    )
 
         if phase_types is None:
             phase_types = [PhaseTypeDefinition(phases=phases)]
@@ -259,10 +273,10 @@ class MaterialDefinition:
         if len(phase_types) > 1:
             pt_labels = [i.type_label for i in phase_types]
             if len(set(pt_labels)) < len(pt_labels):
-                raise ValueError(
+                raise MaterialPhaseTypeLabelError(
                     f"Phase types belonging to the same material ({self.name!r}) must have "
                     f"distinct `type_label`s."
-                )  # TODO: test raise
+                )
 
         self.phase_types = phase_types
 
@@ -280,32 +294,31 @@ class MaterialDefinition:
             if num_unassigned_vol:
                 frac = (1.0 - assigned_vol) / num_unassigned_vol
                 if frac <= 0.0:
-                    raise ValueError(
+                    raise MaterialPhaseTypeFractionError(
                         f"All phase type target volume fractions must sum to one, but "
                         f"assigned target volume fractions sum to {assigned_vol} with "
                         f"{num_unassigned_vol} outstanding unassigned phase type volume "
                         f"fraction(s)."
-                    )  # TODO: test raise
+                    )
             for i in self.phase_types:
                 if i.target_type_fraction is None:
                     i.target_type_fraction = frac
 
             assigned_vol = sum(self.target_phase_type_fractions)
             if not np.isclose(assigned_vol, 1.0):
-                raise ValueError(
+                raise MaterialPhaseTypeFractionError(
                     f"All phase type target type fractions must sum to one, but target "
                     f"type fractions sum to {assigned_vol}."
-                )  # TODO: test raise
+                )
 
         for i in self.phase_types:
             i._material = self
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "name": self.name,
             "properties": self.properties,
-            # "target_volume_fraction": self.target_volume_fraction,
-            "phase_types": [i.to_JSON() for i in self.phase_types],
+            "phase_types": [i.to_JSON(keep_arrays) for i in self.phase_types],
         }
         return data
 
@@ -314,7 +327,6 @@ class MaterialDefinition:
         data = {
             "name": data["name"],
             "properties": data["properties"],
-            # "target_volume_fraction": data["target_volume_fraction"],
             "phase_types": [
                 PhaseTypeDefinition.from_JSON(i) for i in data["phase_types"]
             ],
@@ -416,25 +428,26 @@ class PhaseTypeDefinition:
     def name(self):
         return self.material.name + (f"-{self.type_label}" if self.type_label else "")
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
             "type_label": self.type_label,
-            # "target_type_fraction": self.target_type_fraction,
-            "phases": self.phases.tolist(),
-            "orientations": self.orientations.tolist()
-            if self.orientations is not None
-            else None,
+            "phases": self.phases,
+            "orientations": self.orientations,
         }
+        if not keep_arrays:
+            data["phases"] = data["phases"].tolist()
+            if self.orientations is not None:
+                data["orientations"] = data["orientations"].tolist()
+
         return data
 
     @classmethod
     def from_JSON(cls, data):
         data = {
             "type_label": data["type_label"],
-            # "target_type_fraction": data["target_type_fraction"],
             "phases": np.array(data["phases"]),
             "orientations": np.array(data["orientations"])
-            if data["orientations"]
+            if data["orientations"] is not None
             else None,
         }
         return cls(**data)
@@ -485,14 +498,13 @@ class CIPHERGeometry:
         self._num_phases = all_phases.size
 
         if not np.all(all_phases == np.arange(self.num_phases)):
-            raise ValueError(
+            raise GeometryVoxelPhaseError(
                 "`voxel_phase` must be an array of consecutive integers starting from "
                 "zero."
             )
-            # TODO: test raise
 
         if len(set(self.material_names)) < self.num_materials:
-            raise ValueError(
+            raise GeometryDuplicateMaterialNameError(
                 f"Repeated material names exist in the materials definitions: "
                 f"{self.material_names!r}."
             )
@@ -518,15 +530,20 @@ class CIPHERGeometry:
                 f"phase-type-pair and type-label combination)!"
             )
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
-            "materials": [i.to_JSON() for i in self.materials],
-            "interfaces": [i.to_JSON() for i in self.interfaces],
-            "size": self.size.tolist(),
-            "seeds": self.seeds.tolist(),
-            "voxel_phase": self.voxel_phase.tolist(),
+            "materials": [i.to_JSON(keep_arrays) for i in self.materials],
+            "interfaces": [i.to_JSON(keep_arrays) for i in self.interfaces],
+            "size": self.size,
+            "seeds": self.seeds,
+            "voxel_phase": self.voxel_phase,
             "random_seed": self.random_seed,
         }
+        if not keep_arrays:
+            data["size"] = data["size"].tolist()
+            data["seeds"] = data["seeds"].tolist()
+            data["voxel_phase"] = data["voxel_phase"].tolist()
+
         return data
 
     @classmethod
@@ -564,12 +581,12 @@ class CIPHERGeometry:
         is_mixed = any(is_mat_phases) and any(is_mat_vol_frac)
 
         if is_mixed or (any(is_mat_phases) and not all(is_mat_phases)):
-            raise ValueError(
+            raise GeometryMissingPhaseAssignmentError(
                 f"Specify either: all phases explicitly (via the material definition "
                 f"`phases`, or the constituent phase type definition `phases`), or "
                 f"specify zero or more target volume fractions for the material "
                 f"definitions."
-            )  # TODO: test raise
+            )
 
         if not any(is_mat_phases):
             self._assign_phases_by_volume_fractions(is_mat_vol_frac, random_seed)
@@ -579,6 +596,17 @@ class CIPHERGeometry:
         the specified phases of associated material."""
 
         for i in self.interfaces:
+
+            # assign materials as well as phase_types if materials not assigned to
+            # interface:
+            if not i.materials:
+                i_mats = []
+                # find which material each referenced phase type belongs to:
+                for j in i.phase_types:
+                    mat_j = [k.material.name for k in self.phase_types if k.name == j][0]
+                    i_mats.append(mat_j)
+                i.materials = tuple(i_mats)
+
             if i.phase_pairs.size:
                 mats_idx = np.sort([self.material_names.index(j) for j in i.materials])
                 phase_pairs_material = self.phase_material[i.phase_pairs]
@@ -597,22 +625,22 @@ class CIPHERGeometry:
         if num_unassigned_vol:
             frac = (1.0 - assigned_vol) / num_unassigned_vol
             if frac <= 0.0:
-                raise ValueError(
+                raise GeometryExcessTargetVolumeFractionError(
                     f"All material target volume fractions must sum to one, but "
                     f"assigned target volume fractions sum to {assigned_vol} with "
                     f"{num_unassigned_vol} outstanding unassigned material volume "
                     f"fraction(s)."
-                )  # TODO: test raise
+                )
         for i in self.materials:
             if i.target_volume_fraction is None:
                 i.target_volume_fraction = frac
 
         assigned_vol = sum(self.target_material_volume_fractions)
         if not np.isclose(assigned_vol, 1.0):
-            raise ValueError(
+            raise GeometryNonUnitTargetVolumeFractionError(
                 f"All material target volume fractions must sum to one, but target "
                 f"volume fractions sum to {assigned_vol}."
-            )  # TODO: test raise
+            )
 
         # Now assign phases:
         rng = np.random.default_rng(seed=random_seed)
@@ -834,7 +862,7 @@ class CIPHERGeometry:
         int_is_nan = np.isnan(self.interface_map[int_map_indices])
         phase_idx_int_is_nan = np.vstack(int_map_indices)[:, int_is_nan]
         if phase_idx_int_is_nan.size:
-            raise RuntimeError(
+            raise GeometryUnassignedPhasePairInterfaceError(
                 f"The following phase-pairs have not been assigned an interface "
                 f"definition: {phase_idx_int_is_nan}."
             )
@@ -844,15 +872,23 @@ class CIPHERGeometry:
         misorientation matrix between all pairs."""
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
-        all_oris = []
+        all_oris = np.ones((self.num_phases, 4)) * np.nan
         for i in self.phase_types:
-            all_oris.extend(i.orientations)  # TODO: is this correct order of phases?
-        all_oris = np.vstack(all_oris)
+            all_oris[i.phases] = i.orientations
+
+        if np.any(np.isnan(all_oris)):
+            raise RuntimeError(
+                "Not all orientations are accounted for in the phase type definitions."
+            )
+
         all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         for idx in range(self.num_phases):
-            print(f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}")
+            print(
+                f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
+                flush=True,
+            )
             ori_i = all_oris[idx : idx + 1]
             other_oris = all_oris[idx + 1 :]
             if other_oris.size:
@@ -1211,9 +1247,9 @@ class CIPHERInput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def to_JSON(self):
+    def to_JSON(self, keep_arrays=False):
         data = {
-            "geometry": self.geometry.to_JSON(),
+            "geometry": self.geometry.to_JSON(keep_arrays),
             "components": self.components,
             "outputs": self.outputs,
             "solution_parameters": self.solution_parameters,
@@ -1653,5 +1689,6 @@ class CIPHERInput:
             )
 
         print("done!")
+        self.geometry._check_interface_phase_pairs()
         self.geometry._validate_interfaces()
         self.geometry._validate_interface_map()
