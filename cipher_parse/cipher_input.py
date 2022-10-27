@@ -60,6 +60,8 @@ def compress_1D_array_string(arr, item_delim="\n"):
 def decompress_1D_array_string(arr_str, item_delim="\n"):
     out = []
     for i in arr_str.split(item_delim):
+        if not i:
+            continue
         if "of" in i:
             n, i = i.split("of")
             i = [int(i.strip()) for _ in range(int(n.strip()))]
