@@ -867,6 +867,8 @@ class CIPHERGeometry:
                     int_map[phase_pairs_i[:, 0], phase_pairs_i[:, 1]] = int_i.index
                     if not upper_tri_only:
                         int_map[phase_pairs_i[:, 1], phase_pairs_i[:, 0]] = int_i.index
+                    int_i.phase_pairs = phase_pairs_i
+                    int_i.type_fraction = None
 
         print("done!")
 
