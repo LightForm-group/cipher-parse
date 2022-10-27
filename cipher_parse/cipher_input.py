@@ -108,6 +108,19 @@ class InterfaceDefinition:
 
         self._validate()
 
+    def __eq__(self, other):
+        # note we don't check type_fraction, should we?
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.type_label == other.type_label
+            and sorted(self.phase_types) == sorted(other.phase_types)
+            and self.properties == other.properties
+            and np.all(self.phase_pairs == other.phase_pairs)
+        ):
+            return True
+        return False
+
     def to_JSON(self, keep_arrays=False):
         data = {
             "properties": self.properties,
@@ -313,6 +326,17 @@ class MaterialDefinition:
 
         for i in self.phase_types:
             i._material = self
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.name == other.name
+            and self.properties == other.properties
+            and np.all(self.phases == other.phases)
+        ):
+            return True
+        return False
 
     def to_JSON(self, keep_arrays=False):
         data = {
@@ -521,6 +545,20 @@ class CIPHERGeometry:
         self._validate_interface_map()  # TODO: add setter to interface map
 
         self._phase_orientation = self._get_phase_orientation()
+
+    def __eq__(self, other):
+        # Note we don't check seeds (not stored in YAML file)
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.materials == other.materials
+            and self.interfaces == other.interfaces
+            and np.all(self.size == self.size)
+            and np.all(self.random_seed == self.random_seed)
+            and np.all(self.voxel_phase == self.voxel_phase)
+        ):
+            return True
+        return False
 
     def _validate_interfaces(self):
         int_names = self.interface_names
@@ -1224,6 +1262,18 @@ class CIPHERInput:
 
     def __post_init__(self):
         self._validate()
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.components == other.components
+            and self.solution_parameters == other.solution_parameters
+            and self.outputs == other.outputs
+            and self.geometry == other.geometry
+        ):
+            return True
+        return False
 
     def _validate(self):
         check_grid_size = (
