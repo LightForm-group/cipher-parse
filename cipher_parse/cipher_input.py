@@ -1326,6 +1326,78 @@ class CIPHERInput:
         return cls(**data)
 
     @classmethod
+    def from_input_YAML_file(cls, path):
+        """Generate a CIPHERInput object from a CIPHER input YAML file."""
+
+        with Path(path).open("rt") as fp:
+            file_str = "".join(fp.readlines())
+
+        return cls.from_input_YAML_str(file_str)
+
+    @classmethod
+    def from_input_YAML_str(cls, file_str):
+        """Generate a CIPHERInput object from a CIPHER input YAML file string."""
+
+        yaml = YAML()
+        data = yaml.load(file_str)
+
+        header = data["header"]
+        grid_size = header["grid"]
+        size = header["size"]
+        num_phases = header["n_phases"]
+
+        voxel_phase = decompress_1D_array_string(data["mappings"]["voxel_phase_mapping"])
+        voxel_phase = voxel_phase.reshape(grid_size, order="F") - 1
+
+        unique_phase_IDs = np.unique(voxel_phase)
+        assert len(unique_phase_IDs) == num_phases
+
+        interface_map = decompress_1D_array_string(data["mappings"]["interface_mapping"])
+        interface_map = interface_map.reshape((num_phases, num_phases)) - 1
+        interface_map[np.tril_indices(num_phases)] = -1  # only need one half
+
+        phase_material = (
+            decompress_1D_array_string(data["mappings"]["phase_material_mapping"]) - 1
+        )
+
+        materials = [
+            MaterialDefinition(
+                name=name,
+                properties=dict(props),
+                phases=np.where(phase_material == idx)[0],
+            )
+            for idx, (name, props) in enumerate(data["material"].items())
+        ]
+        interfaces = []
+        for idx, (_, props) in enumerate(data["interface"].items()):
+            phase_pairs = np.vstack(np.where(interface_map == idx)).T
+            mat_1 = materials[phase_material[phase_pairs[0, 0]]].name
+            mat_2 = materials[phase_material[phase_pairs[0, 1]]].name
+            interfaces.append(
+                InterfaceDefinition(
+                    properties=dict(props),
+                    phase_pairs=phase_pairs,
+                    materials=(mat_1, mat_2),
+                )
+            )
+
+        geom = CIPHERGeometry(
+            materials=materials,
+            interfaces=interfaces,
+            voxel_phase=voxel_phase,
+            size=size,
+        )
+
+        attrs = {
+            "geometry": geom,
+            "components": header["components"],
+            "outputs": header["outputs"],
+            "solution_parameters": dict(data["solution_parameters"]),
+        }
+
+        return cls(**attrs)
+
+    @classmethod
     def from_voronoi(
         cls,
         grid_size,
