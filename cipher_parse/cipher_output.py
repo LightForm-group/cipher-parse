@@ -8,6 +8,8 @@ from textwrap import dedent
 
 import numpy as np
 import pyvista as pv
+import pandas as pd
+import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
 from cipher_parse.utilities import get_evenly_spaced_subset
@@ -350,3 +352,93 @@ class CIPHEROutput:
         with Path(path).open("rt") as fp:
             data = json.load(fp)
         return cls.from_JSON(data)
+
+    def show_phase_size_dist_evolution(self):
+
+        voxel_phase = self.cipher_input.geometry.voxel_phase
+        all_inc_data = self.incremental_data
+
+        initial_phase_IDs = np.unique(voxel_phase)
+        num_initial_phases = len(initial_phase_IDs)
+        num_voxels_total = np.product(voxel_phase.shape)
+        num_incs = len(all_inc_data)
+        num_voxels_per_phase = np.zeros((num_incs, num_initial_phases), dtype=int)
+
+        for inc_idx, inc_data in enumerate(all_inc_data):
+            phase_id = inc_data["phaseid"]
+            uniq, counts = np.unique(phase_id.astype(int), return_counts=True)
+            num_voxels_per_phase[inc_idx, uniq] = counts
+
+        phase_size_normed = num_voxels_per_phase / num_voxels_total
+        flattened_phase_size_normed = phase_size_normed.flatten()
+        tiled_phase_ID = np.tile(np.arange(num_initial_phases), num_incs)
+        repeated_incs = np.repeat(np.arange(num_incs), num_initial_phases)
+        df = pd.DataFrame(
+            {
+                "phase_size": flattened_phase_size_normed,
+                "phase_ID": tiled_phase_ID,
+                "increment": repeated_incs,
+            }
+        )
+        num_bins = 50
+        bin_size = 4 / (num_bins * num_initial_phases)
+        bin_edges = np.linspace(0, df.phase_size.max(), num=num_bins)
+
+        df_hist = pd.DataFrame()
+        initial_bins = None
+        max_counts = 0
+        for inc_idx, _ in enumerate(all_inc_data):
+            df_inc_i = df[df["increment"] == inc_idx]
+            counts, bins = np.histogram(df_inc_i.phase_size, bins=bin_edges)
+            bin_indices_i = bins.searchsorted(
+                df_inc_i.phase_size, "right"
+            )  # bin index to which each phase belongs
+
+            max_counts_i = np.max(counts)
+            if max_counts_i > max_counts:
+                max_counts = max_counts_i
+
+            if inc_idx == 0:
+                initial_bins = bins[bin_indices_i - 1]
+
+            df_hist_i = pd.DataFrame(
+                {
+                    "increment": df_inc_i.increment,
+                    "initial_bins": initial_bins,
+                    "phase_ID": df_inc_i.phase_ID,
+                    "bin_index": bin_indices_i,
+                    "bin": bins[bin_indices_i - 1],
+                    "count": np.array([1] * len(bin_indices_i)),
+                }
+            )
+            df_hist = df_hist.append(df_hist_i)
+
+        fig = px.bar(
+            df_hist,
+            x="bin",
+            y="count",
+            color="initial_bins",
+            labels={"x": "phase_size", "y": "count"},
+            animation_frame="increment",
+        )
+
+        # turn off frame transitions:
+        fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 0
+
+        fig.layout.update(
+            {
+                "xaxis": {
+                    "range": [
+                        -bin_size / 2,
+                        np.round(np.max(flattened_phase_size_normed) * 1.1, decimals=2),
+                    ],
+                    "title": "phase size",
+                },
+                "yaxis": {"range": [0, max_counts]},
+                "width": 600,
+                "coloraxis": {"colorbar": {"title": "Initial phase size"}},
+            }
+        )
+        fig.update_traces(width=bin_size)
+
+        return fig
