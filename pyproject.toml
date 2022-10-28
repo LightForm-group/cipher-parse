@@ -24,6 +24,7 @@ itkwidgets = ">=0.25.2"
 hickle = {version = "4.0.4", optional = true}
 matflow = {version = "^0.2.26", optional = true}
 notebook = {version = "^6.5.1", optional = true}
+pandas = "^1.5.1"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
