@@ -1371,15 +1371,16 @@ class CIPHERInput:
         interfaces = []
         for idx, (_, props) in enumerate(data["interface"].items()):
             phase_pairs = np.vstack(np.where(interface_map == idx)).T
-            mat_1 = materials[phase_material[phase_pairs[0, 0]]].name
-            mat_2 = materials[phase_material[phase_pairs[0, 1]]].name
-            interfaces.append(
-                InterfaceDefinition(
-                    properties=dict(props),
-                    phase_pairs=phase_pairs,
-                    materials=(mat_1, mat_2),
+            if phase_pairs.size:
+                mat_1 = materials[phase_material[phase_pairs[0, 0]]].name
+                mat_2 = materials[phase_material[phase_pairs[0, 1]]].name
+                interfaces.append(
+                    InterfaceDefinition(
+                        properties=dict(props),
+                        phase_pairs=phase_pairs,
+                        materials=(mat_1, mat_2),
+                    )
                 )
-            )
 
         geom = CIPHERGeometry(
             materials=materials,
