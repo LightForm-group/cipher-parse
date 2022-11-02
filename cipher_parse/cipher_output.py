@@ -160,7 +160,7 @@ class CIPHEROutput:
             "delete_VTIs": True,
             "delete_VTUs": False,
             "use_existing_VTIs": False,
-            "max_viz_files": None,
+            "num_VTU_files": None,
             "derive_outputs": None,
             "save_outputs": None,
         }
@@ -248,7 +248,7 @@ class CIPHEROutput:
         # Copy back to the root directory VTU files that we want to keep:
         viz_files_keep_idx = get_subset_indices(
             len(vti_file_list),
-            self.options["max_viz_files"],
+            self.options["num_VTU_files"],
         )
         for i in viz_files_keep_idx:
             viz_file_i = vtu_orig_file_list[i]
@@ -262,8 +262,8 @@ class CIPHEROutput:
         # get which files to include for each output/derived output
         outputs_keep_idx = {}
         for save_out_i in self.options["save_outputs"]:
-            if "max_num" in save_out_i:
-                keep_idx = get_subset_indices(len(vti_file_list), save_out_i["max_num"])
+            if "number" in save_out_i:
+                keep_idx = get_subset_indices(len(vti_file_list), save_out_i["number"])
             else:
                 keep_idx = list(range(len(vti_file_list)))
             outputs_keep_idx[save_out_i["name"]] = keep_idx
