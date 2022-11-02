@@ -1,5 +1,6 @@
 import json
 from importlib import resources
+import math
 from pathlib import Path
 from functools import reduce
 
@@ -469,7 +470,7 @@ def get_subset_indices(size, subset_size):
         ratio =  size_s / subset_size_s
         larger_group_size = math.ceil(ratio)
         smaller_group_size = math.floor(ratio)
-        num_larger_groups = int(subset_size_s * (ratio % 1))
+        num_larger_groups = int(round(subset_size_s * (ratio % 1), ndigits=0))
         num_smaller_groups = subset_size_s - num_larger_groups
         
         if num_larger_groups >= num_smaller_groups:
