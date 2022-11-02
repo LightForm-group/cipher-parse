@@ -335,7 +335,7 @@ class CIPHEROutput:
     def to_JSON(self, keep_arrays=False):
         data = {
             "directory": str(self.directory),
-            "options": self.options,  # TODO
+            "options": self.options,
             "input_YAML_file_name": self.input_YAML_file_name,
             "input_YAML_file_str": self.input_YAML_file_str,
             "stdout_file_name": self.stdout_file_name,
