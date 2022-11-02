@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
-from cipher_parse.utilities import get_evenly_spaced_subset
+from cipher_parse.utilities import get_subset_indices
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
 DEFAULT_PARAVIEW_EXE = "pvbatch"
@@ -246,8 +246,8 @@ class CIPHEROutput:
             vtu_orig_file_list.append(dst_i)
 
         # Copy back to the root directory VTU files that we want to keep:
-        viz_files_keep_idx = get_evenly_spaced_subset(
-            vti_file_list,
+        viz_files_keep_idx = get_subset_indices(
+            len(vti_file_list),
             self.options["max_viz_files"],
         )
         for i in viz_files_keep_idx:
@@ -263,7 +263,7 @@ class CIPHEROutput:
         outputs_keep_idx = {}
         for save_out_i in self.options["save_outputs"]:
             if "max_num" in save_out_i:
-                keep_idx = get_evenly_spaced_subset(vti_file_list, save_out_i["max_num"])
+                keep_idx = get_subset_indices(len(vti_file_list), save_out_i["max_num"])
             else:
                 keep_idx = list(range(len(vti_file_list)))
             outputs_keep_idx[save_out_i["name"]] = keep_idx
