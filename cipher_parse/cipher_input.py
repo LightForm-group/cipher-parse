@@ -407,7 +407,23 @@ class MaterialDefinition:
             p=self.target_phase_type_fractions,
         )
         for type_idx, phase_type in enumerate(self.phase_types):
-            phase_type.phases = phases[np.where(phase_phase_type == type_idx)[0]]
+
+            phase_idx_i = np.where(phase_phase_type == type_idx)[0]
+
+            if phase_type.orientations is not None:
+                num_oris_i = phase_type.orientations.shape[0]
+                num_phases_i = len(phase_idx_i)
+                if num_oris_i < num_phases_i:
+                    raise ValueError(
+                    f"Insufficient number of orientations ({num_oris_i}) for phase type "
+                    f"{type_idx} with {num_phases_i} phases."
+                )
+                elif num_oris_i > num_phases_i:
+                    # select a subset randomly:
+                    oris_i_idx = rng.choice(a=num_oris_i, size=num_phases_i)
+                    phase_type.orientations = phase_type.orientations[oris_i_idx]
+
+            phase_type.phases = phases[phase_idx_i]
 
 
 class PhaseTypeDefinition:
