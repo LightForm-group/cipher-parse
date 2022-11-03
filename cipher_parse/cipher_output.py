@@ -222,15 +222,17 @@ class CIPHEROutput:
                 paraview_exe=self.options["paraview_exe"],
             )
 
+        outfile_base = cipher_input.solution_parameters['outfile']
         output_lookup = {
-            i: f"out output.{idx}" for idx, i in enumerate(self.cipher_input.outputs)
+            i: f"{outfile_base} output.{idx}"
+            for idx, i in enumerate(self.cipher_input.outputs)
         }
         vtu_file_list = sorted(
-            list(self.directory.glob("*.vtu")),
+            list(self.directory.glob(f"{outfile_base}_*.vtu")),
             key=lambda x: int(re.search(r"\d+", x.name).group()),
         )
         vti_file_list = sorted(
-            list(self.directory.glob("*.vti")),
+            list(self.directory.glob(f"{outfile_base}_*.vti")),
             key=lambda x: int(re.search(r"\d+", x.name).group()),
         )
 
