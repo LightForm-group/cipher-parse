@@ -7,6 +7,7 @@ from typing import Optional, List, Union, Tuple, Dict
 import numpy as np
 import pyvista as pv
 import h5py
+from parse import parse
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 from damask import Orientation
@@ -1395,16 +1396,21 @@ class CIPHERInput:
             for idx, (name, props) in enumerate(data["material"].items())
         ]
         interfaces = []
-        for idx, (_, props) in enumerate(data["interface"].items()):
+        for idx, (int_name, props) in enumerate(data["interface"].items()):
             phase_pairs = np.vstack(np.where(interface_map == idx)).T
             if phase_pairs.size:
                 mat_1 = materials[phase_material[phase_pairs[0, 0]]].name
                 mat_2 = materials[phase_material[phase_pairs[0, 1]]].name
+                type_label_part = parse(f"{mat_1}-{mat_2}{{}}", int_name)
+                type_label = None
+                if type_label_part:
+                    type_label = type_label_part[0].lstrip("-")
                 interfaces.append(
                     InterfaceDefinition(
                         properties=dict(props),
                         phase_pairs=phase_pairs,
                         materials=(mat_1, mat_2),
+                        type_label=type_label,
                     )
                 )
 

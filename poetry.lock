@@ -1374,6 +1374,14 @@ doc = ["aiohttp", "graphviz", "jinja2 (<3.1)", "myst-nb (==0.12.2)", "myst-parse
 tests = ["flake8", "pytest", "pytest-cov"]
 
 [[package]]
+name = "parse"
+version = "1.19.0"
+description = "parse() is the opposite of format()"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "parso"
 version = "0.8.3"
 description = "A Python Parser"
@@ -2372,7 +2380,7 @@ notebook = ["notebook"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<3.11"
-content-hash = "37d5c22d3b30d3a5bbb7ab643705595f602b55fae10d90fedf81eb36e984bfaf"
+content-hash = "fbe8f82c470df327ebf4ee621f32939c8211efb3fe78ece18dc6e129700c7079"
 
 [metadata.files]
 aiohttp = [
@@ -3517,6 +3525,9 @@ pandocfilters = [
 param = [
     {file = "param-1.12.2-py2.py3-none-any.whl", hash = "sha256:262bc328c49392cf8df3b773659b1b8e12ecf71377c16794fe36be7984e62a92"},
     {file = "param-1.12.2.tar.gz", hash = "sha256:f9ccc45c7f329150fc3dca517b4595859199aa08d9cda2ecdebc112bbe718c0f"},
+]
+parse = [
+    {file = "parse-1.19.0.tar.gz", hash = "sha256:9ff82852bcb65d139813e2a5197627a94966245c897796760a3a2a8eb66f020b"},
 ]
 parso = [
     {file = "parso-0.8.3-py2.py3-none-any.whl", hash = "sha256:c001d4636cd3aecdaf33cbb40aebb59b094be2a74c556778ef5576c175e19e75"},
