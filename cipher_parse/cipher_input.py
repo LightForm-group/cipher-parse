@@ -415,9 +415,9 @@ class MaterialDefinition:
                 num_phases_i = len(phase_idx_i)
                 if num_oris_i < num_phases_i:
                     raise ValueError(
-                    f"Insufficient number of orientations ({num_oris_i}) for phase type "
-                    f"{type_idx} with {num_phases_i} phases."
-                )
+                        f"Insufficient number of orientations ({num_oris_i}) for phase type "
+                        f"{type_idx} with {num_phases_i} phases."
+                    )
                 elif num_oris_i > num_phases_i:
                     # select a subset randomly:
                     oris_i_idx = rng.choice(a=num_oris_i, size=num_phases_i)
@@ -1119,6 +1119,16 @@ class CIPHERGeometry:
         pl = pv.PlotterITK()
         pl.add_mesh(grid)
         pl.show(ui_collapsed=False)
+
+    def write_VTK(self, path):
+
+        grid = self.get_pyvista_grid()
+
+        grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
+        grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
+        grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
+
+        grid.save(path)
 
     @property
     def dimension(self):
