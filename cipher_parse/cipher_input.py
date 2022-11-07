@@ -93,7 +93,7 @@ class InterfaceDefinition:
         properties: Dict,
         materials: Optional[Union[List[str], Tuple[str]]] = None,
         phase_types: Optional[Union[List[str], Tuple[str]]] = None,
-        type_label: Optional[str] = "",
+        type_label: Optional[str] = None,
         type_fraction: Optional[float] = None,
         phase_pairs: Optional[np.ndarray] = None,
         metadata: Optional[Dict] = None,
@@ -1365,7 +1365,7 @@ class CIPHERInput:
     def from_input_YAML_str(cls, file_str):
         """Generate a CIPHERInput object from a CIPHER input YAML file string."""
 
-        yaml = YAML()
+        yaml = YAML(typ="safe")
         data = yaml.load(file_str)
 
         header = data["header"]
