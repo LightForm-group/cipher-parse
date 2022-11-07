@@ -31,10 +31,11 @@ DERIVED_OUTPUTS_FUNCS = {
     "num_voxels_per_phase": num_voxels_per_phase,
 }
 STANDARD_OUTPUTS_TYPES = {
-    'phaseid': int,
-    'interfaceid': int,
-    'matid': int,
+    "phaseid": int,
+    "interfaceid": int,
+    "matid": int,
 }
+
 
 def parse_cipher_stdout(path):
     warning_start = "Warning: "
@@ -206,7 +207,7 @@ class CIPHEROutput:
 
         inc_data, outputs_keep_idx = obj.get_incremental_data()
         obj.incremental_data = inc_data
-        obj.options['outputs_keep_idx'] = outputs_keep_idx
+        obj.options["outputs_keep_idx"] = outputs_keep_idx
 
         return obj
 
@@ -222,7 +223,7 @@ class CIPHEROutput:
                 paraview_exe=self.options["paraview_exe"],
             )
 
-        outfile_base = cipher_input.solution_parameters['outfile']
+        outfile_base = cipher_input.solution_parameters["outfile"]
         output_lookup = {
             i: f"{outfile_base} output.{idx}"
             for idx, i in enumerate(self.cipher_input.outputs)
@@ -391,26 +392,32 @@ class CIPHEROutput:
     def get_num_voxels_per_phase(self):
         pass
 
-    def show_phase_size_dist_evolution(self, use_phaseid=False, layout_args=None):
+    def show_phase_size_dist_evolution(
+        self, use_phaseid=False, as_probability=False, num_bins=50, layout_args=None
+    ):
         """
         Parameters
         ----------
         use_phaseid : bool, optional
             If True, use the phaseid array to calculate the number of voxels per phase. If
             False, use the derived output `num_voxels_per_phase`.
+        as_probability : bool, optional
+            If True, the y-axis will be the probability of selecting a phase of a given
+            size (binned number of voxels). If False, the y-axis will be simply the number
+            of phases of a given size (binned number of voxels).
         layout_args : dict, optional
             Plotly layout options.
         """
 
         voxel_phase = self.cipher_input.geometry.voxel_phase
-        all_inc_data = self.incremental_data        
+        all_inc_data = self.incremental_data
         num_voxels_total = np.product(voxel_phase.shape)
         initial_phase_IDs = np.unique(voxel_phase)
         num_initial_phases = len(initial_phase_IDs)
 
         if use_phaseid:
-            
-            avail_inc_idx = self.options['outputs_keep_idx']['phaseid']
+
+            avail_inc_idx = self.options["outputs_keep_idx"]["phaseid"]
             num_incs = len(avail_inc_idx)
             num_voxels_per_phase = np.zeros((num_incs, num_initial_phases), dtype=int)
 
@@ -420,17 +427,23 @@ class CIPHEROutput:
                 uniq, counts = np.unique(phase_id, return_counts=True)
                 num_voxels_per_phase[idx, uniq] = counts
         else:
-            avail_inc_idx = self.options['outputs_keep_idx']['num_voxels_per_phase']
+            avail_inc_idx = self.options["outputs_keep_idx"]["num_voxels_per_phase"]
             num_incs = len(avail_inc_idx)
-            num_voxels_per_phase = np.vstack([
-                all_inc_data[inc_idx]['num_voxels_per_phase'] for inc_idx in avail_inc_idx
-            ])
+            num_voxels_per_phase = np.vstack(
+                [
+                    all_inc_data[inc_idx]["num_voxels_per_phase"]
+                    for inc_idx in avail_inc_idx
+                ]
+            )
 
         phase_size_normed = num_voxels_per_phase / num_voxels_total
+        # return phase_size_normed
+
         flattened_phase_size_normed = phase_size_normed.flatten()
         tiled_phase_ID = np.tile(np.arange(num_initial_phases), num_incs)
         repeated_incs = np.repeat(avail_inc_idx, num_initial_phases)
 
+        # each row corresponds to a particular phase at a given increment:
         df = pd.DataFrame(
             {
                 "phase_size": flattened_phase_size_normed,
@@ -438,16 +451,20 @@ class CIPHEROutput:
                 "increment": repeated_incs,
             }
         )
-        num_bins = 50
-        bin_size = 4 / (num_bins * num_initial_phases)
-        bin_edges = np.linspace(0, df.phase_size.max(), num=num_bins)
+        max_phase_size = df.phase_size.max()
+        bin_size = max_phase_size / num_bins
+        bin_edges = np.linspace(0, max_phase_size + (bin_size / 2), num=num_bins + 1)
+        bin_edges -= bin_size / 2  # so we have a bin centred on zero.
 
         df_hist = pd.DataFrame()
         initial_bins = None
         max_counts = 0
+        max_prob = 0
         for inc_idx in avail_inc_idx:
             df_inc_i = df[df["increment"] == inc_idx]
             counts, bins = np.histogram(df_inc_i.phase_size, bins=bin_edges)
+            bin_centres = (np.array(bins) + (bin_size / 2))[:-1]
+            prob_i = counts * bin_centres
             bin_indices_i = bins.searchsorted(
                 df_inc_i.phase_size, "right"
             )  # bin index to which each phase belongs
@@ -456,29 +473,57 @@ class CIPHEROutput:
             if max_counts_i > max_counts:
                 max_counts = max_counts_i
 
-            if inc_idx == 0:
-                initial_bins = bins[bin_indices_i - 1]
+            max_prob_i = np.max(prob_i)
+            if max_prob_i > max_prob:
+                max_prob = max_prob_i
 
-            df_hist_i = pd.DataFrame(
-                {
-                    "increment": df_inc_i.increment,
-                    "initial_bins": initial_bins,
-                    "phase_ID": df_inc_i.phase_ID,
-                    "bin_index": bin_indices_i,
-                    "bin": bins[bin_indices_i - 1],
-                    "count": np.array([1] * len(bin_indices_i)),
-                }
-            )
+            if as_probability:
+                # each row corresponds to a single phase-size bin (for this increment):
+                df_hist_i = pd.DataFrame(
+                    {
+                        "increment": [df_inc_i.increment.iat[0]] * num_bins,
+                        "bins": bin_centres,
+                        "probability": prob_i,
+                    }
+                )
+            else:
+
+                if inc_idx == 0:
+                    initial_bins = bins[bin_indices_i - 1]
+
+                # each row corresponds to a particular phase (for this increment):
+                df_hist_i = pd.DataFrame(
+                    {
+                        "increment": df_inc_i.increment,
+                        "initial_bins": initial_bins,
+                        "phase_ID": df_inc_i.phase_ID,
+                        "bin_index": bin_indices_i,
+                        "bin": bins[bin_indices_i - 1],
+                        "count": np.array([1] * len(bin_indices_i)),
+                    }
+                )
+
             df_hist = df_hist.append(df_hist_i)
 
-        fig = px.bar(
-            df_hist,
-            x="bin",
-            y="count",
-            color="initial_bins",
-            labels={"x": "phase_size", "y": "count"},
-            animation_frame="increment",
-        )
+        if as_probability:
+            fig = px.bar(
+                df_hist,
+                x="bins",
+                y="probability",
+                labels={"x": "phase_size", "y": "probability"},
+                animation_frame="increment",
+            )
+            y_max_lim = max_prob
+        else:
+            fig = px.bar(
+                df_hist,
+                x="bin",
+                y="count",
+                color="initial_bins",
+                labels={"x": "phase_size", "y": "count"},
+                animation_frame="increment",
+            )
+            y_max_lim = max_counts
 
         # turn off frame transitions:
         fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 0
@@ -488,12 +533,11 @@ class CIPHEROutput:
                 "xaxis": {
                     "range": [
                         -bin_size / 2,
-                        np.round(np.max(flattened_phase_size_normed) * 1.1, decimals=2),
+                        np.round(np.max(flattened_phase_size_normed) * 1.1, decimals=6),
                     ],
                     "title": "phase size",
                 },
-                "yaxis": {"range": [0, max_counts]},
-                "width": 600,
+                "yaxis": {"range": [0, y_max_lim]},
                 "coloraxis": {
                     "colorbar": {"title": "Initial phase size"},
                     "colorscale": "viridis",
@@ -502,5 +546,6 @@ class CIPHEROutput:
             }
         )
         fig.update_traces(width=bin_size)
+        fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
 
         return fig
