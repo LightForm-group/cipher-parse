@@ -1362,8 +1362,15 @@ class CIPHERInput:
         return cls.from_input_YAML_str(file_str)
 
     @classmethod
-    def from_input_YAML_str(cls, file_str):
-        """Generate a CIPHERInput object from a CIPHER input YAML file string."""
+    def read_input_YAML_file(cls, path):
+
+        with Path(path).open("rt") as fp:
+            file_str = "".join(fp.readlines())
+
+        return cls.read_input_YAML_string(file_str)
+
+    @staticmethod
+    def read_input_YAML_string(file_str, parse_interface_map=True):
 
         yaml = YAML(typ="safe")
         data = yaml.load(file_str)
@@ -1379,28 +1386,51 @@ class CIPHERInput:
         unique_phase_IDs = np.unique(voxel_phase)
         assert len(unique_phase_IDs) == num_phases
 
-        interface_map = decompress_1D_array_string(data["mappings"]["interface_mapping"])
-        interface_map = interface_map.reshape((num_phases, num_phases)) - 1
-        interface_map[np.tril_indices(num_phases)] = -1  # only need one half
+        interface_map = None
+        if parse_interface_map:
+            interface_map = decompress_1D_array_string(
+                data["mappings"]["interface_mapping"]
+            )
+            interface_map = interface_map.reshape((num_phases, num_phases)) - 1
+            interface_map[np.tril_indices(num_phases)] = -1  # only need one half
 
         phase_material = (
             decompress_1D_array_string(data["mappings"]["phase_material_mapping"]) - 1
         )
 
+        return {
+            "header": header,
+            "grid_size": grid_size,
+            "size": size,
+            "num_phases": num_phases,
+            "voxel_phase": voxel_phase,
+            "unique_phase_IDs": unique_phase_IDs,
+            "material": data["material"],
+            "interface": data["interface"],
+            "interface_map": interface_map,
+            "phase_material": phase_material,
+            "solution_parameters": data["solution_parameters"],
+        }
+
+    @classmethod
+    def from_input_YAML_str(cls, file_str):
+        """Generate a CIPHERInput object from a CIPHER input YAML file string."""
+
+        yaml_dat = cls.read_input_YAML_string(file_str)
         materials = [
             MaterialDefinition(
                 name=name,
                 properties=dict(props),
-                phases=np.where(phase_material == idx)[0],
+                phases=np.where(yaml_dat["phase_material"] == idx)[0],
             )
-            for idx, (name, props) in enumerate(data["material"].items())
+            for idx, (name, props) in enumerate(yaml_dat["material"].items())
         ]
         interfaces = []
-        for idx, (int_name, props) in enumerate(data["interface"].items()):
-            phase_pairs = np.vstack(np.where(interface_map == idx)).T
+        for idx, (int_name, props) in enumerate(yaml_dat["interface"].items()):
+            phase_pairs = np.vstack(np.where(yaml_dat["interface_map"] == idx)).T
             if phase_pairs.size:
-                mat_1 = materials[phase_material[phase_pairs[0, 0]]].name
-                mat_2 = materials[phase_material[phase_pairs[0, 1]]].name
+                mat_1 = materials[yaml_dat["phase_material"][phase_pairs[0, 0]]].name
+                mat_2 = materials[yaml_dat["phase_material"][phase_pairs[0, 1]]].name
                 type_label_part = parse(f"{mat_1}-{mat_2}{{}}", int_name)
                 type_label = None
                 if type_label_part:
@@ -1417,15 +1447,15 @@ class CIPHERInput:
         geom = CIPHERGeometry(
             materials=materials,
             interfaces=interfaces,
-            voxel_phase=voxel_phase,
-            size=size,
+            voxel_phase=yaml_dat["voxel_phase"],
+            size=yaml_dat["size"],
         )
 
         attrs = {
             "geometry": geom,
-            "components": header["components"],
-            "outputs": header["outputs"],
-            "solution_parameters": dict(data["solution_parameters"]),
+            "components": yaml_dat["header"]["components"],
+            "outputs": yaml_dat["header"]["outputs"],
+            "solution_parameters": dict(yaml_dat["solution_parameters"]),
         }
 
         return cls(**attrs)

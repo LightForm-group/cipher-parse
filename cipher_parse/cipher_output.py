@@ -335,6 +335,13 @@ class CIPHEROutput:
             )
         return self._cipher_stdout
 
+    def get_input_YAML_data(self, parse_interface_map=False):
+        """Get some basic input details (using the YAML input file) without initialising
+        the CIPHERInput object, which can take a while depending on the grid size."""
+        return CIPHERInput.read_input_YAML_string(
+            self.input_YAML_file_str, parse_interface_map=parse_interface_map
+        )
+
     def to_JSON(self, keep_arrays=False):
         data = {
             "directory": str(self.directory),
@@ -409,10 +416,12 @@ class CIPHEROutput:
             Plotly layout options.
         """
 
-        voxel_phase = self.cipher_input.geometry.voxel_phase
+        input_yaml_dat = self.get_input_YAML_data()
+        voxel_phase = input_yaml_dat["voxel_phase"]
+        initial_phase_IDs = input_yaml_dat["unique_phase_IDs"]
+
         all_inc_data = self.incremental_data
         num_voxels_total = np.product(voxel_phase.shape)
-        initial_phase_IDs = np.unique(voxel_phase)
         num_initial_phases = len(initial_phase_IDs)
 
         if use_phaseid:
