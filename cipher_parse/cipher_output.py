@@ -399,40 +399,29 @@ class CIPHEROutput:
     def get_num_voxels_per_phase(self):
         pass
 
-    def show_phase_size_dist_evolution(
-        self,
+    @staticmethod
+    def _prepare_phase_size_dist_evolution_dataframe(
+        cipher_output,
         use_phaseid=False,
         as_probability=False,
-        num_bins=50,
+        num_bins=None,
+        bin_size=None,
         max_increments=20,
-        layout_args=None,
     ):
-        """
-        Parameters
-        ----------
-        use_phaseid : bool, optional
-            If True, use the phaseid array to calculate the number of voxels per phase. If
-            False, use the derived output `num_voxels_per_phase`.
-        as_probability : bool, optional
-            If True, the y-axis will be the probability of selecting a phase of a given
-            size (binned number of voxels). If False, the y-axis will be simply the number
-            of phases of a given size (binned number of voxels).
-        layout_args : dict, optional
-            Plotly layout options.
-        """
-
-        input_yaml_dat = self.get_input_YAML_data()
+        input_yaml_dat = cipher_output.get_input_YAML_data()
         voxel_phase = input_yaml_dat["voxel_phase"]
         initial_phase_IDs = input_yaml_dat["unique_phase_IDs"]
 
-        all_inc_data = self.incremental_data
+        all_inc_data = cipher_output.incremental_data
         num_voxels_total = np.product(voxel_phase.shape)
         num_initial_phases = len(initial_phase_IDs)
 
         if use_phaseid:
-            avail_inc_idx = self.options["outputs_keep_idx"]["phaseid"]
+            avail_inc_idx = cipher_output.options["outputs_keep_idx"]["phaseid"]
         else:
-            avail_inc_idx = self.options["outputs_keep_idx"]["num_voxels_per_phase"]
+            avail_inc_idx = cipher_output.options["outputs_keep_idx"][
+                "num_voxels_per_phase"
+            ]
 
         subset_idx = get_subset_indices(len(avail_inc_idx), max_increments)
         avail_inc_idx = [avail_inc_idx[i] for i in subset_idx]
@@ -470,8 +459,19 @@ class CIPHEROutput:
                 "increment": repeated_incs,
             }
         )
+
         max_phase_size = df.phase_size.max()
-        bin_size = max_phase_size / num_bins
+
+        if num_bins is not None and bin_size is not None:
+            raise TypeError(f"Specify exactly one of `num_bins` and `bin_size`.")
+        elif num_bins is None and bin_size is None:
+            num_bins = 50
+
+        if bin_size is None:
+            bin_size = max_phase_size / num_bins
+        else:
+            num_bins = int(max_phase_size / bin_size)
+
         bin_edges = np.linspace(0, max_phase_size + (bin_size / 2), num=num_bins + 1)
         bin_edges -= bin_size / 2  # so we have a bin centred on zero.
 
@@ -524,6 +524,46 @@ class CIPHEROutput:
 
             df_hist = df_hist.append(df_hist_i)
 
+        return df_hist, max_counts, max_prob, bin_size, max_phase_size
+
+    def show_phase_size_dist_evolution(
+        self,
+        use_phaseid=False,
+        as_probability=False,
+        num_bins=None,
+        bin_size=None,
+        max_increments=20,
+        layout_args=None,
+    ):
+        """
+        Parameters
+        ----------
+        use_phaseid : bool, optional
+            If True, use the phaseid array to calculate the number of voxels per phase. If
+            False, use the derived output `num_voxels_per_phase`.
+        as_probability : bool, optional
+            If True, the y-axis will be the probability of selecting a phase of a given
+            size (binned number of voxels). If False, the y-axis will be simply the number
+            of phases of a given size (binned number of voxels).
+        layout_args : dict, optional
+            Plotly layout options.
+        """
+
+        (
+            df_hist,
+            max_counts,
+            max_prob,
+            bin_size,
+            max_phase_size,
+        ) = self._prepare_phase_size_dist_evolution_dataframe(
+            self,
+            use_phaseid=use_phaseid,
+            as_probability=as_probability,
+            num_bins=num_bins,
+            bin_size=bin_size,
+            max_increments=max_increments,
+        )
+
         if as_probability:
             fig = px.bar(
                 df_hist,
@@ -552,7 +592,7 @@ class CIPHEROutput:
                 "xaxis": {
                     "range": [
                         -bin_size / 2,
-                        np.round(np.max(flattened_phase_size_normed) * 1.1, decimals=6),
+                        np.round(max_phase_size * 1.1, decimals=6),
                     ],
                     "title": "phase size",
                 },
