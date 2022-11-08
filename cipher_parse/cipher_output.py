@@ -400,7 +400,12 @@ class CIPHEROutput:
         pass
 
     def show_phase_size_dist_evolution(
-        self, use_phaseid=False, as_probability=False, num_bins=50, layout_args=None
+        self,
+        use_phaseid=False,
+        as_probability=False,
+        num_bins=50,
+        max_increments=20,
+        layout_args=None,
     ):
         """
         Parameters
@@ -425,18 +430,23 @@ class CIPHEROutput:
         num_initial_phases = len(initial_phase_IDs)
 
         if use_phaseid:
-
             avail_inc_idx = self.options["outputs_keep_idx"]["phaseid"]
-            num_incs = len(avail_inc_idx)
-            num_voxels_per_phase = np.zeros((num_incs, num_initial_phases), dtype=int)
+        else:
+            avail_inc_idx = self.options["outputs_keep_idx"]["num_voxels_per_phase"]
 
+        subset_idx = get_subset_indices(len(avail_inc_idx), max_increments)
+        avail_inc_idx = [avail_inc_idx[i] for i in subset_idx]
+
+        num_incs = len(avail_inc_idx)
+
+        if use_phaseid:
+            num_voxels_per_phase = np.zeros((num_incs, num_initial_phases), dtype=int)
             for idx, inc_idx in enumerate(avail_inc_idx):
                 inc_data = all_inc_data[inc_idx]
                 phase_id = inc_data["phaseid"]
                 uniq, counts = np.unique(phase_id, return_counts=True)
                 num_voxels_per_phase[idx, uniq] = counts
         else:
-            avail_inc_idx = self.options["outputs_keep_idx"]["num_voxels_per_phase"]
             num_incs = len(avail_inc_idx)
             num_voxels_per_phase = np.vstack(
                 [
