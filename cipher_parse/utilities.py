@@ -445,7 +445,7 @@ def get_example_data_path_dream3D_3D():
 def get_subset_indices(size, subset_size):
     """Get a list of N indices that index as uniformly as possible a sequence of a given
     size, with the constraint that the indices must include the initial and final elements.
-    
+
     Parameters
     -----------
     size : int
@@ -454,25 +454,25 @@ def get_subset_indices(size, subset_size):
     Returns
     -------
     list of int
-    
+
     """
     if subset_size == 0:
         idx = []
-    elif subset_size == 1:
+    elif subset_size == 1 or (subset_size == 2 and size == 1):
         idx = [0]
     elif subset_size == 2:
         idx = [0, size - 1]
     elif subset_size >= size:
         idx = list(range(0, size))
     else:
-        size_s = (size - 1)
-        subset_size_s = (subset_size - 1)
-        ratio =  size_s / subset_size_s
+        size_s = size - 1
+        subset_size_s = subset_size - 1
+        ratio = size_s / subset_size_s
         larger_group_size = math.ceil(ratio)
         smaller_group_size = math.floor(ratio)
         num_larger_groups = int(round(subset_size_s * (ratio % 1), ndigits=0))
         num_smaller_groups = subset_size_s - num_larger_groups
-        
+
         if num_larger_groups >= num_smaller_groups:
             more_freq_group = (num_larger_groups, larger_group_size)
             less_freq_group = (num_smaller_groups, smaller_group_size)
@@ -488,10 +488,17 @@ def get_subset_indices(size, subset_size):
 
             num_ratio = int(more_freq_group[0] / less_freq_group[0])
             for i in range(subset_size_s):
+                if num_A == num_B == 0:
+                    break
+
                 sub_i = []
                 if num_A >= num_ratio:
                     sub_i = [more_freq_group[1]] * num_ratio
                     num_A -= num_ratio
+                elif num_A < num_ratio:
+                    sub_i = [more_freq_group[1]] * num_A
+                    num_A = 0
+
                 if num_B >= 1:
                     sub_i += [less_freq_group[1]] * 1
                     num_B -= 1

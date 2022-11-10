@@ -396,8 +396,147 @@ class CIPHEROutput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def get_num_voxels_per_phase(self):
-        pass
+    @classmethod
+    def compare_phase_size_dist_evolution(
+        cls,
+        cipher_outputs,
+        bin_size,
+        use_phaseid=False,
+        as_probability=False,
+        max_increments=20,
+        labels=None,
+        row_labels=None,
+        col_labels=None,
+        label_order=None,
+        row_label_name=None,
+        col_label_name=None,
+        label_name=None,
+        layout_args=None,
+    ):
+
+        if len(cipher_outputs) > 1 and not (row_labels or col_labels or labels):
+            raise TypeError(
+                "Multiple cipher outputs but not labels/row_labels/col_labels "
+                "specified."
+            )
+
+        if labels is not None:
+            if len(labels) != len(cipher_outputs):
+                raise TypeError(
+                    "Length of `labels` must equal length of `cipher_outputs`."
+                )
+        elif not (row_labels or col_labels):
+            labels = list(range(len(cipher_outputs)))
+
+        if row_labels is not None:
+            if len(row_labels) != len(cipher_outputs):
+                raise TypeError(
+                    "Length of `row_labels` must equal length of `cipher_outputs."
+                )
+        if col_labels is not None:
+            if len(col_labels) != len(cipher_outputs):
+                raise TypeError(
+                    "Length of `col_labels` must equal length of `cipher_outputs."
+                )
+
+        label_name = label_name or "label"
+        row_label_name = row_label_name or "row_label"
+        col_label_name = col_label_name or "col_label"
+
+        df_hist_all = pd.DataFrame()
+        max_phase_size_all = 0
+        max_prob_all = 0
+        max_counts_all = 0
+        for idx, out_i in enumerate(cipher_outputs):
+            (
+                df_hist_i,
+                max_counts_i,
+                max_prob_i,
+                _,
+                max_phase_size_i,
+            ) = cls._prepare_phase_size_dist_evolution_dataframe(
+                out_i,
+                use_phaseid=use_phaseid,
+                as_probability=as_probability,
+                bin_size=bin_size,
+                max_increments=max_increments,
+            )
+
+            if labels:
+                df_hist_i[label_name] = str(labels[idx])
+            if col_labels:
+                df_hist_i[col_label_name] = str(col_labels[idx])
+            if row_labels:
+                df_hist_i[row_label_name] = str(row_labels[idx])
+
+            df_hist_all = df_hist_all.append(df_hist_i)
+
+            if max_phase_size_i > max_phase_size_all:
+                max_phase_size_all = max_phase_size_i
+            if max_prob_i > max_prob_all:
+                max_prob_all = max_prob_i
+            if max_counts_i > max_counts_all:
+                max_counts_all = max_counts_i
+
+        com_args = {}
+        if row_labels:
+            com_args["facet_row"] = row_label_name
+        if col_labels:
+            com_args["facet_col"] = col_label_name
+
+        if label_order:
+            com_args["category_orders"] = label_order
+
+        if as_probability:
+            if labels:
+                com_args["color"] = label_name
+            fig = px.bar(
+                df_hist_all,
+                x="bins",
+                y="probability",
+                labels={"x": "phase_size", "y": "probability"},
+                animation_frame="evo_idx",
+                barmode="overlay",
+                **com_args,
+            )
+            y_max_lim = max_prob_all
+        else:
+            fig = px.bar(
+                df_hist_all,
+                x="bin",
+                y="count",
+                color="initial_bins",
+                labels={"x": "phase_size", "y": "count"},
+                animation_frame="evo_idx",
+                barmode="overlay",
+                **com_args,
+            )
+            y_max_lim = max_counts_all
+
+        # turn off frame transitions:
+        fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 0
+
+        fig.layout.update(
+            {
+                "xaxis": {
+                    "range": [
+                        -bin_size / 2,
+                        np.round(max_phase_size_all * 1.1, decimals=6),
+                    ],
+                    "title": "phase size",
+                },
+                "yaxis": {"range": [0, y_max_lim]},
+                "coloraxis": {
+                    "colorbar": {"title": "Initial phase size"},
+                    "colorscale": "viridis",
+                },
+                **(layout_args or {}),
+            }
+        )
+        fig.update_traces(width=bin_size)
+        fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
+
+        return fig
 
     @staticmethod
     def _prepare_phase_size_dist_evolution_dataframe(
@@ -479,7 +618,7 @@ class CIPHEROutput:
         initial_bins = None
         max_counts = 0
         max_prob = 0
-        for inc_idx in avail_inc_idx:
+        for evo_idx, inc_idx in enumerate(avail_inc_idx):
             df_inc_i = df[df["increment"] == inc_idx]
             counts, bins = np.histogram(df_inc_i.phase_size, bins=bin_edges)
             bin_centres = (np.array(bins) + (bin_size / 2))[:-1]
@@ -521,6 +660,8 @@ class CIPHEROutput:
                         "count": np.array([1] * len(bin_indices_i)),
                     }
                 )
+
+            df_hist_i["evo_idx"] = evo_idx
 
             df_hist = df_hist.append(df_hist_i)
 
