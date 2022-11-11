@@ -565,6 +565,10 @@ class CIPHERGeometry:
 
         self._phase_orientation = self._get_phase_orientation()
 
+        # assigned by `get_misorientation_matrix`:
+        self._misorientation_matrix = None
+        self._misorientation_matrix_is_degrees = None
+
     def __eq__(self, other):
         # Note we don't check seeds (not stored in YAML file)
         if not isinstance(other, self.__class__):
@@ -595,11 +599,14 @@ class CIPHERGeometry:
             "seeds": self.seeds,
             "voxel_phase": self.voxel_phase,
             "random_seed": self.random_seed,
+            "misorientation_matrix": self.misorientation_matrix,
+            "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
             data["seeds"] = data["seeds"].tolist()
             data["voxel_phase"] = data["voxel_phase"].tolist()
+            data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
 
         return data
 
@@ -613,7 +620,12 @@ class CIPHERGeometry:
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
         }
-        return cls(**data)
+        obj = cls(**data)
+        obj._misorientation_matrix = np.array(data["misorientation_matrix"])
+        obj._misorientation_matrix_is_degrees = np.array(
+            data["misorientation_matrix_is_degrees"]
+        )
+        return obj
 
     @property
     def interfaces(self):
@@ -623,6 +635,14 @@ class CIPHERGeometry:
     def interfaces(self, interfaces):
         self._interfaces = interfaces
         self._validate_interfaces()
+
+    @property
+    def misorientation_matrix(self):
+        return self._misorientation_matrix
+
+    @property
+    def misorientation_matrix_is_degrees(self):
+        return self._misorientation_matrix_is_degrees
 
     def _get_phase_num_voxels(self):
         return np.array(
@@ -926,9 +946,15 @@ class CIPHERGeometry:
                 f"definition: {phase_idx_int_is_nan}."
             )
 
-    def get_misorientation_matrix(self, degrees=True):
+    def get_misorientation_matrix(self, degrees=True, overwrite=False):
         """Given phase type definitions that include orientation lists, get the
         misorientation matrix between all pairs."""
+
+        if self.misorientation_matrix is not None and not overwrite:
+            print(
+                "Misorientation matrix is already set. Use `overwrite=True` to recompute."
+            )
+            return
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         all_oris = np.ones((self.num_phases, 4)) * np.nan
@@ -957,6 +983,9 @@ class CIPHERGeometry:
 
         if degrees:
             misori_matrix = np.rad2deg(misori_matrix)
+
+        self._misorientation_matrix = misori_matrix
+        self._misorientation_matrix_is_degrees = degrees
 
         return misori_matrix
 
