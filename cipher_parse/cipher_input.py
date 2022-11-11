@@ -612,7 +612,7 @@ class CIPHERGeometry:
 
     @classmethod
     def from_JSON(cls, data):
-        data = {
+        data_init = {
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
             "size": np.array(data["size"]),
@@ -620,7 +620,7 @@ class CIPHERGeometry:
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
         }
-        obj = cls(**data)
+        obj = cls(**data_init)
         obj._misorientation_matrix = np.array(data["misorientation_matrix"])
         obj._misorientation_matrix_is_degrees = np.array(
             data["misorientation_matrix_is_degrees"]
