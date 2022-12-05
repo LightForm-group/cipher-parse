@@ -584,7 +584,6 @@ class CIPHEROutput:
             )
 
         phase_size_normed = num_voxels_per_phase / num_voxels_total
-        # return phase_size_normed
 
         flattened_phase_size_normed = phase_size_normed.flatten()
         tiled_phase_ID = np.tile(np.arange(num_initial_phases), num_incs)
