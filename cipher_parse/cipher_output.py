@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
-from cipher_parse.utilities import get_subset_indices
+from cipher_parse.utilities import get_subset_indices, get_time_linear_subset_indices
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
 DEFAULT_PARAVIEW_EXE = "pvbatch"
@@ -37,7 +37,7 @@ STANDARD_OUTPUTS_TYPES = {
 }
 
 
-def parse_cipher_stdout(path):
+def parse_cipher_stdout(path_or_string, is_string=False):
     warning_start = "Warning: "
     write_out = "writing output at time "
 
@@ -51,38 +51,42 @@ def parse_cipher_stdout(path):
     wlter = []
     outputs = {}  # keys file names; values times
 
-    with Path(path).open("rt") as fp:
-        lines = fp.readlines()
-        for ln_idx, ln in enumerate(lines):
-            ln = ln.strip()
-            if ln.startswith(warning_start):
-                warnings.append(ln.split(warning_start)[1])
-                continue
+    if is_string:
+        lines = path_or_string.split("\n")
+    else:
+        with Path(path_or_string).open("rt") as fp:
+            lines = fp.readlines()
 
-            step_search = re.search(r"\s+step\s+(\d+)\s+(.*)", ln)
-            if step_search:
-                groups = step_search.groups()
-                step = int(groups[0])
-                steps.append(step)
+    for ln_idx, ln in enumerate(lines):
+        ln = ln.strip()
+        if ln.startswith(warning_start):
+            warnings.append(ln.split(warning_start)[1])
+            continue
 
-                step_dat = groups[1].split()
+        step_search = re.search(r"\s+step\s+(\d+)\s+(.*)", ln)
+        if step_search:
+            groups = step_search.groups()
+            step = int(groups[0])
+            steps.append(step)
 
-                is_accepted.append(bool(step_dat[0]))
-                time.append(float(step_dat[1][2:].rstrip("+")))
+            step_dat = groups[1].split()
 
-                dt_pat = r"dt=(\d\.\d+e(-|\+)\d+)"
-                dt_group = re.search(dt_pat, ln).groups()[0]
-                dt.append(float(dt_group))
+            is_accepted.append(bool(step_dat[0]))
+            time.append(float(step_dat[1][2:].rstrip("+")))
 
-                wlte.append(float(step_dat[-5].lstrip("wlte=")))
-                wltea.append(float(step_dat[-3]))
-                wlter.append(float(step_dat[-1]))
+            dt_pat = r"dt=(\d\.\d+e(-|\+)\d+)"
+            dt_group = re.search(dt_pat, ln).groups()[0]
+            dt.append(float(dt_group))
 
-            elif ln.startswith(write_out):
-                ln_s = ln.split()
-                outputs.update({ln_s[6]: float(ln_s[4])})
-            else:
-                continue
+            wlte.append(float(step_dat[-5].lstrip("wlte=")))
+            wltea.append(float(step_dat[-3]))
+            wlter.append(float(step_dat[-1]))
+
+        elif ln.startswith(write_out):
+            ln_s = ln.split()
+            outputs.update({ln_s[6]: float(ln_s[4])})
+        else:
+            continue
 
     out = {
         "warnings": warnings,
@@ -162,6 +166,7 @@ class CIPHEROutput:
             "delete_VTUs": False,
             "use_existing_VTIs": False,
             "num_VTU_files": None,
+            "VTU_files_time_interval": None,
             "derive_outputs": None,
             "save_outputs": None,
         }
@@ -176,6 +181,21 @@ class CIPHEROutput:
 
         self._cipher_input = None
         self._cipher_stdout = None
+
+        if (
+            options.get("VTU_files_time_interval") is not None
+            and options.get("num_VTU_files") is not None
+        ):
+            raise ValueError(
+                "Specify at most one of 'num_VTU_files' and 'VTU_files_time_interval'."
+            )
+
+        for idx, i in enumerate(options["save_outputs"]):
+            if i.get("number") is not None and i.get("time_interval") is not None:
+                raise ValueError(
+                    f"Specify at most one of 'number' and 'time_interval' for save "
+                    f"output {idx}."
+                )
 
     @classmethod
     def parse(
@@ -210,6 +230,13 @@ class CIPHEROutput:
         obj.options["outputs_keep_idx"] = outputs_keep_idx
 
         return obj
+
+    def _get_time_linear_subset_indices(self, time_interval):
+        return get_time_linear_subset_indices(
+            time_interval=time_interval,
+            max_time=self.get_input_YAML_data()["solution_parameters"]["time"],
+            times=np.array(list(self.cipher_stdout["outputs"].values())),
+        )
 
     def get_incremental_data(self):
         """Generate temporary VTI files to parse requested cipher outputs on a uniform
@@ -249,10 +276,18 @@ class CIPHEROutput:
             vtu_orig_file_list.append(dst_i)
 
         # Copy back to the root directory VTU files that we want to keep:
-        viz_files_keep_idx = get_subset_indices(
-            len(vti_file_list),
-            self.options["num_VTU_files"],
-        )
+        if self.options["num_VTU_files"]:
+            viz_files_keep_idx = get_subset_indices(
+                len(vti_file_list),
+                self.options["num_VTU_files"],
+            )
+        elif self.options["VTU_files_time_interval"]:
+            viz_files_keep_idx = self._get_time_linear_subset_indices(
+                time_interval=self.options["VTU_files_time_interval"]
+            )
+        else:
+            viz_files_keep_idx = []
+
         for i in viz_files_keep_idx:
             viz_file_i = vtu_orig_file_list[i]
             dst_i = Path("").joinpath(viz_file_i.name).with_suffix("").with_suffix(".vtu")
@@ -267,6 +302,10 @@ class CIPHEROutput:
         for save_out_i in self.options["save_outputs"]:
             if "number" in save_out_i:
                 keep_idx = get_subset_indices(len(vti_file_list), save_out_i["number"])
+            elif "time_interval" in save_out_i:
+                keep_idx = self._get_time_linear_subset_indices(
+                    time_interval=save_out_i["time_interval"]
+                )
             else:
                 keep_idx = list(range(len(vti_file_list)))
             outputs_keep_idx[save_out_i["name"]] = keep_idx
@@ -319,6 +358,8 @@ class CIPHEROutput:
                 print(f"Deleting temporary VTI file: {file_i}")
                 os.remove(file_i)
 
+        outputs_keep_idx["VTU_files"] = viz_files_keep_idx
+
         return incremental_data, outputs_keep_idx
 
     @property
@@ -330,9 +371,15 @@ class CIPHEROutput:
     @property
     def cipher_stdout(self):
         if not self._cipher_stdout:
-            self._cipher_stdout = parse_cipher_stdout(
-                self.directory / self.stdout_file_name
-            )
+            if self.stdout_file_str:
+                self._cipher_stdout = parse_cipher_stdout(
+                    self.stdout_file_str,
+                    is_string=True,
+                )
+            else:
+                self._cipher_stdout = parse_cipher_stdout(
+                    self.directory / self.stdout_file_name
+                )
         return self._cipher_stdout
 
     def get_input_YAML_data(self, parse_interface_map=False):
