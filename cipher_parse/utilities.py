@@ -411,7 +411,7 @@ def set_by_path(root, path, value):
 
 
 def read_shockley(theta, E_max, theta_max, degrees=True):
-    """Misorientation-grain-boundary-energy relationship for low angle GBs."""
+    """Misorientation-grain-boundary-energy relationship for low-angle GBs."""
 
     if degrees:
         theta = np.deg2rad(theta)
@@ -426,6 +426,18 @@ def read_shockley(theta, E_max, theta_max, degrees=True):
     E[theta > theta_max] = np.max(E[theta < theta_max])
 
     return E
+
+
+def grain_boundary_mobility(theta, M_max, theta_max, n=4, B=5, degrees=True):
+    """Misorientation-grain-boundary-mobility relationship for low-angle GBs."""
+
+    if degrees:
+        theta = np.deg2rad(theta)
+        theta_max = np.deg2rad(theta_max)
+
+    M = M_max * (1 - np.exp(-B * (theta / theta_max) ** n))
+
+    return M
 
 
 def get_example_data_path_dream3D_2D():

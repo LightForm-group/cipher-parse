@@ -921,6 +921,9 @@ class CIPHERGeometry:
     def get_interface_idx(self):
         return self.voxel_map.get_interface_idx(self.interface_map_int)
 
+    def get_interface_misorientation(self):
+        return self.voxel_map.get_interface_idx(self.misorientation_matrix)
+
     def _modify_interface_map(self, phase_A, phase_B, interface_idx):
         """
         Parameters
@@ -1820,7 +1823,7 @@ class CIPHERInput:
         Parameters
         ----------
         base_interface_name : str
-        property : tuple of str
+        property_name : tuple of str
         property_values : ndarray of shape (N_phases, N_phases)
             N_phases it the total number of phases in the geometry.
         bin_edges : ndarray of float, optional
@@ -1831,19 +1834,28 @@ class CIPHERInput:
 
         """
 
+        if not isinstance(property_name, list):
+            property_name = [property_name]
+
+        if not isinstance(property_values, list):
+            property_values = [property_values]
+
+        if not isinstance(bin_edges, list):
+            bin_edges = [bin_edges]
+
         base_defn, phase_pairs = self.geometry.remove_interface(base_interface_name)
-        new_vals_all = property_values[phase_pairs[0], phase_pairs[1]]
+        new_vals_all = property_values[0][phase_pairs[0], phase_pairs[1]]
 
         new_interfaces_data = []
-        if bin_edges is not None:
-            bin_idx = np.digitize(new_vals_all, bin_edges)
+        if bin_edges[0] is not None:
+            bin_idx = np.digitize(new_vals_all, bin_edges[0])
             all_pp_idx_i = []
-            for idx, bin_i in enumerate(bin_edges):
+            for idx, bin_i in enumerate(bin_edges[0]):
                 pp_idx_i = np.where(bin_idx == idx + 1)[0]
                 all_pp_idx_i.extend(pp_idx_i.tolist())
                 if pp_idx_i.size:
-                    if idx < len(bin_edges) - 1:
-                        value = (bin_i + bin_edges[idx + 1]) / 2
+                    if idx < len(bin_edges[0]) - 1:
+                        value = (bin_i + bin_edges[0][idx + 1]) / 2
                     else:
                         value = bin_i
                     print(
@@ -1853,9 +1865,22 @@ class CIPHERInput:
                     new_interfaces_data.append(
                         {
                             "phase_pairs": phase_pairs.T[pp_idx_i],
-                            "value": value,
+                            "values": [value],
+                            "bin_idx": idx,
                         }
                     )
+
+            for name, vals, edges in zip(
+                property_name[1:], property_values[1:], bin_edges[1:]
+            ):
+                for idx, new_int_dat in enumerate(new_interfaces_data):
+                    bin_idx = new_int_dat["bin_idx"]
+                    bin_i = edges[bin_idx]
+                    if bin_idx < len(edges) - 1:
+                        value = (bin_i + edges[bin_idx + 1]) / 2
+                    else:
+                        value = bin_i
+                    new_interfaces_data[idx]["values"].append(value)
 
             miss_phase_pairs = set(np.arange(phase_pairs.shape[1])) - set(all_pp_idx_i)
             if miss_phase_pairs:
@@ -1881,7 +1906,7 @@ class CIPHERInput:
             new_interfaces_data = [
                 {
                     "phase_pairs": np.array([pp]),
-                    "value": new_vals_all[pp_idx],
+                    "values": [i[pp_idx] for i in new_vals_all],
                 }
                 for pp_idx, pp in enumerate(phase_pairs.T)
             ]
@@ -1891,8 +1916,9 @@ class CIPHERInput:
         for idx, i in enumerate(new_interfaces_data):
 
             props = copy.deepcopy(base_defn.properties)
-            new_value = i["value"].item()  #  convert from numpy to native
-            set_by_path(root=props, path=property_name, value=new_value)
+            for name, val in zip(property_name, i["values"]):
+                new_value = val.item()  #  convert from numpy to native
+                set_by_path(root=props, path=name, value=new_value)
 
             new_type_lab = str(idx)
             if base_defn.type_label:
