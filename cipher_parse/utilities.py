@@ -512,3 +512,13 @@ def get_subset_indices(size, subset_size):
         idx += [size_s]
 
     return idx
+
+
+def get_time_linear_subset_indices(time_interval, max_time, times):
+    intervals = np.linspace(
+        0,
+        max_time,
+        num=int(((max_time + time_interval) / time_interval)),
+        endpoint=True,
+    )
+    return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1)))
