@@ -1,5 +1,6 @@
 import json
 from importlib import resources
+import math
 from pathlib import Path
 from functools import reduce
 
@@ -410,7 +411,7 @@ def set_by_path(root, path, value):
 
 
 def read_shockley(theta, E_max, theta_max, degrees=True):
-    """Misorientation-grain-boundary-energy relationship for low angle GBs."""
+    """Misorientation-grain-boundary-energy relationship for low-angle GBs."""
 
     if degrees:
         theta = np.deg2rad(theta)
@@ -427,6 +428,18 @@ def read_shockley(theta, E_max, theta_max, degrees=True):
     return E
 
 
+def grain_boundary_mobility(theta, M_max, theta_max, n=4, B=5, degrees=True):
+    """Misorientation-grain-boundary-mobility relationship for low-angle GBs."""
+
+    if degrees:
+        theta = np.deg2rad(theta)
+        theta_max = np.deg2rad(theta_max)
+
+    M = M_max * (1 - np.exp(-B * (theta / theta_max) ** n))
+
+    return M
+
+
 def get_example_data_path_dream3D_2D():
     with resources.path(
         "cipher_parse.example_data.dream3d.2D", "synthetic_d3d.dream3d"
@@ -441,41 +454,83 @@ def get_example_data_path_dream3D_3D():
         return p
 
 
-def factors(n, non_prime_only=False):
-    facs = set(
-        reduce(
-            list.__add__,
-            ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)
-        )
-    )
-    if non_prime_only:
-        facs = facs - {1, n}
-        
-    return facs
+def get_subset_indices(size, subset_size):
+    """Get a list of N indices that index as uniformly as possible a sequence of a given
+    size, with the constraint that the indices must include the initial and final elements.
 
-def get_evenly_spaced_subset(lst, max_num):
-    """Get evenly spaced indices that include the initial and final elements
-    in a list. If the list is of length N and N - 1 is prime, then the final
-    spacing will be one larger than the other spacings."""
-    if max_num == 1:
+    Parameters
+    -----------
+    size : int
+    subset_size : int
+
+    Returns
+    -------
+    list of int
+
+    """
+    if subset_size == 0:
+        idx = []
+    elif subset_size == 1 or (subset_size == 2 and size == 1):
         idx = [0]
-    elif max_num == 2:
-        idx = [0, len(lst) - 1]
-    elif max_num >= len(lst):
-        idx = list(range(0, len(lst)))
+    elif subset_size == 2:
+        idx = [0, size - 1]
+    elif subset_size >= size:
+        idx = list(range(0, size))
     else:
-        step_sizes = factors(len(lst) - 1, non_prime_only=True)
-        is_prime = False
-        if not step_sizes:
-            is_prime = True
-            step_sizes = factors(len(lst) - 2, non_prime_only=True)
-        step_sizes_num_steps = [
-            (i, ((len(lst) - (1 if not is_prime else 2)) / i) + 1)
-            for i in step_sizes
-        ]
-        valid = [i for i in step_sizes_num_steps if i[1] <= max_num]        
-        valid_max = max(valid, key=lambda x: x[1])
-        idx = list(range(0, len(lst), valid_max[0]))
-        if is_prime:
-            idx[-1] = len(lst) - 1
+        size_s = size - 1
+        subset_size_s = subset_size - 1
+        ratio = size_s / subset_size_s
+        larger_group_size = math.ceil(ratio)
+        smaller_group_size = math.floor(ratio)
+        num_larger_groups = int(round(subset_size_s * (ratio % 1), ndigits=0))
+        num_smaller_groups = subset_size_s - num_larger_groups
+
+        if num_larger_groups >= num_smaller_groups:
+            more_freq_group = (num_larger_groups, larger_group_size)
+            less_freq_group = (num_smaller_groups, smaller_group_size)
+        else:
+            more_freq_group = (num_smaller_groups, smaller_group_size)
+            less_freq_group = (num_larger_groups, larger_group_size)
+
+        group_sizes = []
+        num_A = more_freq_group[0]
+        num_B = less_freq_group[0]
+
+        if less_freq_group[0] > 0:
+
+            num_ratio = int(more_freq_group[0] / less_freq_group[0])
+            for i in range(subset_size_s):
+                if num_A == num_B == 0:
+                    break
+
+                sub_i = []
+                if num_A >= num_ratio:
+                    sub_i = [more_freq_group[1]] * num_ratio
+                    num_A -= num_ratio
+                elif num_A < num_ratio:
+                    sub_i = [more_freq_group[1]] * num_A
+                    num_A = 0
+
+                if num_B >= 1:
+                    sub_i += [less_freq_group[1]] * 1
+                    num_B -= 1
+                group_sizes.extend(sub_i)
+        else:
+            group_sizes = [smaller_group_size] * num_smaller_groups
+
+        idx = [0]
+        for i in group_sizes[:-1]:
+            idx.append(i + idx[-1])
+        idx += [size_s]
+
     return idx
+
+
+def get_time_linear_subset_indices(time_interval, max_time, times):
+    intervals = np.linspace(
+        0,
+        max_time,
+        num=int(((max_time + time_interval) / time_interval)),
+        endpoint=True,
+    )
+    return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1)))

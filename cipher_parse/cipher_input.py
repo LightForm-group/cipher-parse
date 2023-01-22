@@ -7,6 +7,7 @@ from typing import Optional, List, Union, Tuple, Dict
 import numpy as np
 import pyvista as pv
 import h5py
+from parse import parse
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 from damask import Orientation
@@ -60,6 +61,8 @@ def compress_1D_array_string(arr, item_delim="\n"):
 def decompress_1D_array_string(arr_str, item_delim="\n"):
     out = []
     for i in arr_str.split(item_delim):
+        if not i:
+            continue
         if "of" in i:
             n, i = i.split("of")
             i = [int(i.strip()) for _ in range(int(n.strip()))]
@@ -90,7 +93,7 @@ class InterfaceDefinition:
         properties: Dict,
         materials: Optional[Union[List[str], Tuple[str]]] = None,
         phase_types: Optional[Union[List[str], Tuple[str]]] = None,
-        type_label: Optional[str] = "",
+        type_label: Optional[str] = None,
         type_fraction: Optional[float] = None,
         phase_pairs: Optional[np.ndarray] = None,
         metadata: Optional[Dict] = None,
@@ -107,6 +110,19 @@ class InterfaceDefinition:
         self.metadata = metadata
 
         self._validate()
+
+    def __eq__(self, other):
+        # note we don't check type_fraction, should we?
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.type_label == other.type_label
+            and sorted(self.phase_types) == sorted(other.phase_types)
+            and self.properties == other.properties
+            and np.all(self.phase_pairs == other.phase_pairs)
+        ):
+            return True
+        return False
 
     def to_JSON(self, keep_arrays=False):
         data = {
@@ -314,6 +330,17 @@ class MaterialDefinition:
         for i in self.phase_types:
             i._material = self
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.name == other.name
+            and self.properties == other.properties
+            and np.all(self.phases == other.phases)
+        ):
+            return True
+        return False
+
     def to_JSON(self, keep_arrays=False):
         data = {
             "name": self.name,
@@ -381,7 +408,23 @@ class MaterialDefinition:
             p=self.target_phase_type_fractions,
         )
         for type_idx, phase_type in enumerate(self.phase_types):
-            phase_type.phases = phases[np.where(phase_phase_type == type_idx)[0]]
+
+            phase_idx_i = np.where(phase_phase_type == type_idx)[0]
+
+            if phase_type.orientations is not None:
+                num_oris_i = phase_type.orientations.shape[0]
+                num_phases_i = len(phase_idx_i)
+                if num_oris_i < num_phases_i:
+                    raise ValueError(
+                        f"Insufficient number of orientations ({num_oris_i}) for phase type "
+                        f"{type_idx} with {num_phases_i} phases."
+                    )
+                elif num_oris_i > num_phases_i:
+                    # select a subset randomly:
+                    oris_i_idx = rng.choice(a=num_oris_i, size=num_phases_i)
+                    phase_type.orientations = phase_type.orientations[oris_i_idx]
+
+            phase_type.phases = phases[phase_idx_i]
 
 
 class PhaseTypeDefinition:
@@ -522,6 +565,24 @@ class CIPHERGeometry:
 
         self._phase_orientation = self._get_phase_orientation()
 
+        # assigned by `get_misorientation_matrix`:
+        self._misorientation_matrix = None
+        self._misorientation_matrix_is_degrees = None
+
+    def __eq__(self, other):
+        # Note we don't check seeds (not stored in YAML file)
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.materials == other.materials
+            and self.interfaces == other.interfaces
+            and np.all(self.size == self.size)
+            and np.all(self.random_seed == self.random_seed)
+            and np.all(self.voxel_phase == self.voxel_phase)
+        ):
+            return True
+        return False
+
     def _validate_interfaces(self):
         int_names = self.interface_names
         if len(set(int_names)) < len(int_names):
@@ -538,17 +599,20 @@ class CIPHERGeometry:
             "seeds": self.seeds,
             "voxel_phase": self.voxel_phase,
             "random_seed": self.random_seed,
+            "misorientation_matrix": self.misorientation_matrix,
+            "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
             data["seeds"] = data["seeds"].tolist()
             data["voxel_phase"] = data["voxel_phase"].tolist()
+            data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
 
         return data
 
     @classmethod
     def from_JSON(cls, data):
-        data = {
+        data_init = {
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
             "size": np.array(data["size"]),
@@ -556,7 +620,12 @@ class CIPHERGeometry:
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
         }
-        return cls(**data)
+        obj = cls(**data_init)
+        obj._misorientation_matrix = np.array(data["misorientation_matrix"])
+        obj._misorientation_matrix_is_degrees = np.array(
+            data["misorientation_matrix_is_degrees"]
+        )
+        return obj
 
     @property
     def interfaces(self):
@@ -566,6 +635,14 @@ class CIPHERGeometry:
     def interfaces(self, interfaces):
         self._interfaces = interfaces
         self._validate_interfaces()
+
+    @property
+    def misorientation_matrix(self):
+        return self._misorientation_matrix
+
+    @property
+    def misorientation_matrix_is_degrees(self):
+        return self._misorientation_matrix_is_degrees
 
     def _get_phase_num_voxels(self):
         return np.array(
@@ -827,6 +904,8 @@ class CIPHERGeometry:
                     int_map[phase_pairs_i[:, 0], phase_pairs_i[:, 1]] = int_i.index
                     if not upper_tri_only:
                         int_map[phase_pairs_i[:, 1], phase_pairs_i[:, 0]] = int_i.index
+                    int_i.phase_pairs = phase_pairs_i
+                    int_i.type_fraction = None
 
         print("done!")
 
@@ -841,6 +920,9 @@ class CIPHERGeometry:
 
     def get_interface_idx(self):
         return self.voxel_map.get_interface_idx(self.interface_map_int)
+
+    def get_interface_misorientation(self):
+        return self.voxel_map.get_interface_idx(self.misorientation_matrix)
 
     def _modify_interface_map(self, phase_A, phase_B, interface_idx):
         """
@@ -867,9 +949,15 @@ class CIPHERGeometry:
                 f"definition: {phase_idx_int_is_nan}."
             )
 
-    def get_misorientation_matrix(self, degrees=True):
+    def get_misorientation_matrix(self, degrees=True, overwrite=False):
         """Given phase type definitions that include orientation lists, get the
         misorientation matrix between all pairs."""
+
+        if self.misorientation_matrix is not None and not overwrite:
+            print(
+                "Misorientation matrix is already set. Use `overwrite=True` to recompute."
+            )
+            return
 
         misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         all_oris = np.ones((self.num_phases, 4)) * np.nan
@@ -898,6 +986,9 @@ class CIPHERGeometry:
 
         if degrees:
             misori_matrix = np.rad2deg(misori_matrix)
+
+        self._misorientation_matrix = misori_matrix
+        self._misorientation_matrix_is_degrees = degrees
 
         return misori_matrix
 
@@ -950,6 +1041,7 @@ class CIPHERGeometry:
         seeds=None,
         num_phases=None,
         random_seed=None,
+        is_periodic=False,
     ):
 
         if sum(i is not None for i in (seeds, num_phases)) != 1:
@@ -960,7 +1052,7 @@ class CIPHERGeometry:
                 num_regions=num_phases,
                 grid_size=grid_size,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
                 random_seed=random_seed,
             )
             seeds = vor_map.seeds
@@ -970,7 +1062,7 @@ class CIPHERGeometry:
                 region_seeds=seeds,
                 grid_size=grid_size,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
             )
 
         return cls(
@@ -991,6 +1083,7 @@ class CIPHERGeometry:
         grid_size,
         size,
         random_seed=None,
+        is_periodic=False,
     ):
         return cls.from_voronoi(
             interfaces=interfaces,
@@ -999,6 +1092,7 @@ class CIPHERGeometry:
             size=size,
             seeds=seeds,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
@@ -1010,6 +1104,7 @@ class CIPHERGeometry:
         grid_size,
         size,
         random_seed=None,
+        is_periodic=False,
     ):
         return cls.from_voronoi(
             interfaces=interfaces,
@@ -1018,6 +1113,7 @@ class CIPHERGeometry:
             size=size,
             num_phases=num_phases,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @property
@@ -1056,6 +1152,16 @@ class CIPHERGeometry:
         pl = pv.PlotterITK()
         pl.add_mesh(grid)
         pl.show(ui_collapsed=False)
+
+    def write_VTK(self, path):
+
+        grid = self.get_pyvista_grid()
+
+        grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
+        grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
+        grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
+
+        grid.save(path)
 
     @property
     def dimension(self):
@@ -1220,6 +1326,18 @@ class CIPHERInput:
     def __post_init__(self):
         self._validate()
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.components == other.components
+            and self.solution_parameters == other.solution_parameters
+            and self.outputs == other.outputs
+            and self.geometry == other.geometry
+        ):
+            return True
+        return False
+
     def _validate(self):
         check_grid_size = (
             np.array(self.solution_parameters["initblocksize"])
@@ -1267,6 +1385,114 @@ class CIPHERInput:
         return cls(**data)
 
     @classmethod
+    def from_input_YAML_file(cls, path):
+        """Generate a CIPHERInput object from a CIPHER input YAML file."""
+
+        with Path(path).open("rt") as fp:
+            file_str = "".join(fp.readlines())
+
+        return cls.from_input_YAML_str(file_str)
+
+    @classmethod
+    def read_input_YAML_file(cls, path):
+
+        with Path(path).open("rt") as fp:
+            file_str = "".join(fp.readlines())
+
+        return cls.read_input_YAML_string(file_str)
+
+    @staticmethod
+    def read_input_YAML_string(file_str, parse_interface_map=True):
+
+        yaml = YAML(typ="safe")
+        data = yaml.load(file_str)
+
+        header = data["header"]
+        grid_size = header["grid"]
+        size = header["size"]
+        num_phases = header["n_phases"]
+
+        voxel_phase = decompress_1D_array_string(data["mappings"]["voxel_phase_mapping"])
+        voxel_phase = voxel_phase.reshape(grid_size, order="F") - 1
+
+        unique_phase_IDs = np.unique(voxel_phase)
+        assert len(unique_phase_IDs) == num_phases
+
+        interface_map = None
+        if parse_interface_map:
+            interface_map = decompress_1D_array_string(
+                data["mappings"]["interface_mapping"]
+            )
+            interface_map = interface_map.reshape((num_phases, num_phases)) - 1
+            interface_map[np.tril_indices(num_phases)] = -1  # only need one half
+
+        phase_material = (
+            decompress_1D_array_string(data["mappings"]["phase_material_mapping"]) - 1
+        )
+
+        return {
+            "header": header,
+            "grid_size": grid_size,
+            "size": size,
+            "num_phases": num_phases,
+            "voxel_phase": voxel_phase,
+            "unique_phase_IDs": unique_phase_IDs,
+            "material": data["material"],
+            "interface": data["interface"],
+            "interface_map": interface_map,
+            "phase_material": phase_material,
+            "solution_parameters": data["solution_parameters"],
+        }
+
+    @classmethod
+    def from_input_YAML_str(cls, file_str):
+        """Generate a CIPHERInput object from a CIPHER input YAML file string."""
+
+        yaml_dat = cls.read_input_YAML_string(file_str)
+        materials = [
+            MaterialDefinition(
+                name=name,
+                properties=dict(props),
+                phases=np.where(yaml_dat["phase_material"] == idx)[0],
+            )
+            for idx, (name, props) in enumerate(yaml_dat["material"].items())
+        ]
+        interfaces = []
+        for idx, (int_name, props) in enumerate(yaml_dat["interface"].items()):
+            phase_pairs = np.vstack(np.where(yaml_dat["interface_map"] == idx)).T
+            if phase_pairs.size:
+                mat_1 = materials[yaml_dat["phase_material"][phase_pairs[0, 0]]].name
+                mat_2 = materials[yaml_dat["phase_material"][phase_pairs[0, 1]]].name
+                type_label_part = parse(f"{mat_1}-{mat_2}{{}}", int_name)
+                type_label = None
+                if type_label_part:
+                    type_label = type_label_part[0].lstrip("-")
+                interfaces.append(
+                    InterfaceDefinition(
+                        properties=dict(props),
+                        phase_pairs=phase_pairs,
+                        materials=(mat_1, mat_2),
+                        type_label=type_label,
+                    )
+                )
+
+        geom = CIPHERGeometry(
+            materials=materials,
+            interfaces=interfaces,
+            voxel_phase=yaml_dat["voxel_phase"],
+            size=yaml_dat["size"],
+        )
+
+        attrs = {
+            "geometry": geom,
+            "components": yaml_dat["header"]["components"],
+            "outputs": yaml_dat["header"]["outputs"],
+            "solution_parameters": dict(yaml_dat["solution_parameters"]),
+        }
+
+        return cls(**attrs)
+
+    @classmethod
     def from_voronoi(
         cls,
         grid_size,
@@ -1279,6 +1505,7 @@ class CIPHERInput:
         seeds=None,
         num_phases=None,
         random_seed=None,
+        is_periodic=False,
     ):
 
         geometry = CIPHERGeometry.from_voronoi(
@@ -1289,6 +1516,7 @@ class CIPHERInput:
             grid_size=grid_size,
             size=size,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
         inp = cls(
@@ -1311,6 +1539,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        is_periodic=False,
     ):
 
         return cls.from_voronoi(
@@ -1323,6 +1552,7 @@ class CIPHERInput:
             outputs=outputs,
             solution_parameters=solution_parameters,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
@@ -1337,6 +1567,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        is_periodic=False,
     ):
 
         return cls.from_voronoi(
@@ -1349,6 +1580,7 @@ class CIPHERInput:
             outputs=outputs,
             solution_parameters=solution_parameters,
             random_seed=random_seed,
+            is_periodic=is_periodic,
         )
 
     @classmethod
@@ -1591,7 +1823,7 @@ class CIPHERInput:
         Parameters
         ----------
         base_interface_name : str
-        property : tuple of str
+        property_name : tuple of str
         property_values : ndarray of shape (N_phases, N_phases)
             N_phases it the total number of phases in the geometry.
         bin_edges : ndarray of float, optional
@@ -1602,19 +1834,28 @@ class CIPHERInput:
 
         """
 
+        if not isinstance(property_name, list):
+            property_name = [property_name]
+
+        if not isinstance(property_values, list):
+            property_values = [property_values]
+
+        if not isinstance(bin_edges, list):
+            bin_edges = [bin_edges]
+
         base_defn, phase_pairs = self.geometry.remove_interface(base_interface_name)
-        new_vals_all = property_values[phase_pairs[0], phase_pairs[1]]
+        new_vals_all = property_values[0][phase_pairs[0], phase_pairs[1]]
 
         new_interfaces_data = []
-        if bin_edges is not None:
-            bin_idx = np.digitize(new_vals_all, bin_edges)
+        if bin_edges[0] is not None:
+            bin_idx = np.digitize(new_vals_all, bin_edges[0])
             all_pp_idx_i = []
-            for idx, bin_i in enumerate(bin_edges):
+            for idx, bin_i in enumerate(bin_edges[0]):
                 pp_idx_i = np.where(bin_idx == idx + 1)[0]
                 all_pp_idx_i.extend(pp_idx_i.tolist())
                 if pp_idx_i.size:
-                    if idx < len(bin_edges) - 1:
-                        value = (bin_i + bin_edges[idx + 1]) / 2
+                    if idx < len(bin_edges[0]) - 1:
+                        value = (bin_i + bin_edges[0][idx + 1]) / 2
                     else:
                         value = bin_i
                     print(
@@ -1624,9 +1865,22 @@ class CIPHERInput:
                     new_interfaces_data.append(
                         {
                             "phase_pairs": phase_pairs.T[pp_idx_i],
-                            "value": value,
+                            "values": [value],
+                            "bin_idx": idx,
                         }
                     )
+
+            for name, vals, edges in zip(
+                property_name[1:], property_values[1:], bin_edges[1:]
+            ):
+                for idx, new_int_dat in enumerate(new_interfaces_data):
+                    bin_idx = new_int_dat["bin_idx"]
+                    bin_i = edges[bin_idx]
+                    if bin_idx < len(edges) - 1:
+                        value = (bin_i + edges[bin_idx + 1]) / 2
+                    else:
+                        value = bin_i
+                    new_interfaces_data[idx]["values"].append(value)
 
             miss_phase_pairs = set(np.arange(phase_pairs.shape[1])) - set(all_pp_idx_i)
             if miss_phase_pairs:
@@ -1652,7 +1906,7 @@ class CIPHERInput:
             new_interfaces_data = [
                 {
                     "phase_pairs": np.array([pp]),
-                    "value": new_vals_all[pp_idx],
+                    "values": [i[pp_idx] for i in new_vals_all],
                 }
                 for pp_idx, pp in enumerate(phase_pairs.T)
             ]
@@ -1662,8 +1916,9 @@ class CIPHERInput:
         for idx, i in enumerate(new_interfaces_data):
 
             props = copy.deepcopy(base_defn.properties)
-            new_value = i["value"].item()  #  convert from numpy to native
-            set_by_path(root=props, path=property_name, value=new_value)
+            for name, val in zip(property_name, i["values"]):
+                new_value = val.item()  #  convert from numpy to native
+                set_by_path(root=props, path=name, value=new_value)
 
             new_type_lab = str(idx)
             if base_defn.type_label:
