@@ -1,4 +1,55 @@
 
+<a name="v0.5.0a0"></a>
+## [v0.5.0a0](https://github.com/LightForm-group/cipher-parse/compare/v0.4.0...v0.5.0a0) - 2023.01.22
+
+### ✨ Features
+
+* add grain_boundary_mobility empirical form
+* support saving outputs via time increment
+* save misori matrix
+* add compare_phase_size_dist_evolution
+* add bin_size to show_phase_size_dist_evo
+* add max_increments opt to show_phase_size_dist_evolution
+* add `read_input_YAML_string`
+* add option to show size dist as prob
+* add CIPHERGeometry.write_VTK; fix [#35](https://github.com/LightForm-group/cipher-parse/issues/35)
+* select orientations when assigning phases
+* add options to CIPHEROutput
+* add derived outputs
+* add show_phase_size_dist_evolution
+* add CIPHEROutput
+* read YAML file back in
+* set int phase_pairs on _get_interface_map
+* add __eq__ to CIPHERInput classes
+* add is_periodic to voronoi gen
+
+### 🐛 Bug Fixes
+
+* CIPHERGeometry.from_JSON
+* failing round trip test
+* parse type label in CIPHERInput from YAML
+* glob specificity for VTK search
+* better output options naming
+* get_subset_indices
+* more robust VTK subset selector
+* CIPHERInput from YAML with unused interface
+* decompress array empty line bug
+
+### 👷 Build changes
+
+* constrain ipywidgets
+* deps update
+* deps
+* merge branch 'aplowman/develop' of https://github.com/LightForm-group/cipher-parse into aplowman/develop
+* update deps
+* add notebook extras
+* add optional matflow extra dep
+
+
+<a name="v0.4.0"></a>
+## [v0.4.0](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a3...v0.4.0) - 2022.10.26
+
+
 <a name="v0.3.1a3"></a>
 ## [v0.3.1a3](https://github.com/LightForm-group/cipher-parse/compare/v0.3.1a2...v0.3.1a3) - 2022.10.26
 
