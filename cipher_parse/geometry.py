@@ -1,0 +1,833 @@
+from damask import Orientation
+from cipher_parse.discrete_voronoi import DiscreteVoronoi
+from cipher_parse.voxel_map import VoxelMap
+import pyvista as pv
+
+from cipher_parse.errors import (
+    GeometryDuplicateMaterialNameError,
+    GeometryExcessTargetVolumeFractionError,
+    GeometryMissingPhaseAssignmentError,
+    GeometryNonUnitTargetVolumeFractionError,
+    GeometryUnassignedPhasePairInterfaceError,
+    GeometryVoxelPhaseError,
+)
+
+
+class CIPHERGeometry:
+    def __init__(
+        self,
+        materials,
+        interfaces,
+        size,
+        seeds=None,
+        voxel_phase=None,
+        voxel_map=None,
+        random_seed=None,
+    ):
+
+        if sum(i is not None for i in (voxel_phase, voxel_map)) != 1:
+            raise ValueError(f"Specify exactly one of `voxel_phase` and `voxel_map`")
+        if voxel_map is None:
+            voxel_map = VoxelMap(region_ID=voxel_phase, size=size, is_periodic=True)
+        else:
+            voxel_phase = voxel_map.region_ID
+
+        self._interfaces = None
+
+        self.voxel_map = voxel_map
+        self.voxel_phase = voxel_phase
+        self.seeds = np.asarray(seeds)
+        self.materials = materials
+        self.interfaces = interfaces
+        self.random_seed = random_seed
+        self.size = np.asarray(size)
+
+        for i in self.materials:
+            i._geometry = self
+
+        for idx, i in enumerate(self.interfaces):
+            i.index = idx
+
+        if self.size.size != self.dimension:
+            raise ValueError(
+                f"`size` ({self.size}) implies {self.size.size} dimensions, but "
+                f"`voxel_phase` implies {self.voxel_phase.dimension} dimensions."
+            )
+
+        all_phases = np.unique(self.voxel_phase)
+        self._num_phases = all_phases.size
+
+        if not np.all(all_phases == np.arange(self.num_phases)):
+            raise GeometryVoxelPhaseError(
+                "`voxel_phase` must be an array of consecutive integers starting from "
+                "zero."
+            )
+
+        if len(set(self.material_names)) < self.num_materials:
+            raise GeometryDuplicateMaterialNameError(
+                f"Repeated material names exist in the materials definitions: "
+                f"{self.material_names!r}."
+            )
+
+        self._ensure_phase_assignment(random_seed)
+
+        self._phase_material = self._get_phase_material()
+        self._validate_interfaces()
+        self._check_interface_phase_pairs()
+
+        self._phase_phase_type = self._get_phase_phase_type()
+        self._phase_num_voxels = self._get_phase_num_voxels()
+        self._interface_map = self._get_interface_map()
+        self._validate_interface_map()  # TODO: add setter to interface map
+
+        self._phase_orientation = self._get_phase_orientation()
+
+        # assigned by `get_misorientation_matrix`:
+        self._misorientation_matrix = None
+        self._misorientation_matrix_is_degrees = None
+
+    def __eq__(self, other):
+        # Note we don't check seeds (not stored in YAML file)
+        if not isinstance(other, self.__class__):
+            return False
+        if (
+            self.materials == other.materials
+            and self.interfaces == other.interfaces
+            and np.all(self.size == self.size)
+            and np.all(self.random_seed == self.random_seed)
+            and np.all(self.voxel_phase == self.voxel_phase)
+        ):
+            return True
+        return False
+
+    def _validate_interfaces(self):
+        int_names = self.interface_names
+        if len(set(int_names)) < len(int_names):
+            raise ValueError(
+                f"Multiple interfaces have the same name (i.e. "
+                f"phase-type-pair and type-label combination)!"
+            )
+
+    def to_JSON(self, keep_arrays=False):
+        data = {
+            "materials": [i.to_JSON(keep_arrays) for i in self.materials],
+            "interfaces": [i.to_JSON(keep_arrays) for i in self.interfaces],
+            "size": self.size,
+            "seeds": self.seeds,
+            "voxel_phase": self.voxel_phase,
+            "random_seed": self.random_seed,
+            "misorientation_matrix": self.misorientation_matrix,
+            "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
+        }
+        if not keep_arrays:
+            data["size"] = data["size"].tolist()
+            data["seeds"] = data["seeds"].tolist()
+            data["voxel_phase"] = data["voxel_phase"].tolist()
+            data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
+
+        return data
+
+    @classmethod
+    def from_JSON(cls, data):
+        data_init = {
+            "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
+            "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
+            "size": np.array(data["size"]),
+            "seeds": np.array(data["seeds"]),
+            "voxel_phase": np.array(data["voxel_phase"]),
+            "random_seed": data["random_seed"],
+        }
+        obj = cls(**data_init)
+        obj._misorientation_matrix = np.array(data["misorientation_matrix"])
+        obj._misorientation_matrix_is_degrees = np.array(
+            data["misorientation_matrix_is_degrees"]
+        )
+        return obj
+
+    @property
+    def interfaces(self):
+        return self._interfaces
+
+    @interfaces.setter
+    def interfaces(self, interfaces):
+        self._interfaces = interfaces
+        self._validate_interfaces()
+
+    @property
+    def misorientation_matrix(self):
+        return self._misorientation_matrix
+
+    @property
+    def misorientation_matrix_is_degrees(self):
+        return self._misorientation_matrix_is_degrees
+
+    def _get_phase_num_voxels(self):
+        return np.array(
+            [
+                np.sum(self.voxel_phase == phase_idx)
+                for phase_idx in range(self.num_phases)
+            ]
+        )
+
+    def _ensure_phase_assignment(self, random_seed):
+        is_mat_phases = [i.phases is not None for i in self.materials]
+        is_mat_vol_frac = [i is not None for i in self.target_material_volume_fractions]
+        is_mixed = any(is_mat_phases) and any(is_mat_vol_frac)
+
+        if is_mixed or (any(is_mat_phases) and not all(is_mat_phases)):
+            raise GeometryMissingPhaseAssignmentError(
+                f"Specify either: all phases explicitly (via the material definition "
+                f"`phases`, or the constituent phase type definition `phases`), or "
+                f"specify zero or more target volume fractions for the material "
+                f"definitions."
+            )
+
+        if not any(is_mat_phases):
+            self._assign_phases_by_volume_fractions(is_mat_vol_frac, random_seed)
+
+    def _check_interface_phase_pairs(self):
+        """If interfaces have phase-pairs specified, check these are consistent with
+        the specified phases of associated material."""
+
+        for i in self.interfaces:
+
+            # assign materials as well as phase_types if materials not assigned to
+            # interface:
+            if not i.materials:
+                i_mats = []
+                # find which material each referenced phase type belongs to:
+                for j in i.phase_types:
+                    mat_j = [k.material.name for k in self.phase_types if k.name == j][0]
+                    i_mats.append(mat_j)
+                i.materials = tuple(i_mats)
+
+            if i.phase_pairs.size:
+                mats_idx = np.sort([self.material_names.index(j) for j in i.materials])
+                phase_pairs_material = self.phase_material[i.phase_pairs]
+                phase_pairs_mat_srt = np.sort(phase_pairs_material, axis=1)
+                if not np.all(np.all(phase_pairs_mat_srt == mats_idx, axis=1)):
+                    raise ValueError(
+                        f"Phase pairs specified for interface {i.name!r} are not "
+                        f"consistent with phases specified for the interface materials "
+                        f"{i.materials[0]!r} and {i.materials[1]!r}."
+                    )  # TODO: test raise
+
+    def _assign_phases_by_volume_fractions(self, is_mat_vol_frac, random_seed):
+        # Assign via target volume fractions.
+        num_unassigned_vol = self.num_materials - sum(is_mat_vol_frac)
+        assigned_vol = sum(i or 0.0 for i in self.target_material_volume_fractions)
+        if num_unassigned_vol:
+            frac = (1.0 - assigned_vol) / num_unassigned_vol
+            if frac <= 0.0:
+                raise GeometryExcessTargetVolumeFractionError(
+                    f"All material target volume fractions must sum to one, but "
+                    f"assigned target volume fractions sum to {assigned_vol} with "
+                    f"{num_unassigned_vol} outstanding unassigned material volume "
+                    f"fraction(s)."
+                )
+        for i in self.materials:
+            if i.target_volume_fraction is None:
+                i.target_volume_fraction = frac
+
+        assigned_vol = sum(self.target_material_volume_fractions)
+        if not np.isclose(assigned_vol, 1.0):
+            raise GeometryNonUnitTargetVolumeFractionError(
+                f"All material target volume fractions must sum to one, but target "
+                f"volume fractions sum to {assigned_vol}."
+            )
+
+        # Now assign phases:
+        rng = np.random.default_rng(seed=random_seed)
+        phase_material = rng.choice(
+            a=self.num_materials,
+            size=self.num_phases,
+            p=self.target_material_volume_fractions,
+        )
+        for mat_idx, mat in enumerate(self.materials):
+            mat_phases = np.where(phase_material == mat_idx)[0]
+            mat.assign_phases(mat_phases)
+
+    def _get_phase_material(self):
+        phase_material = np.ones(self.num_phases) * np.nan
+        all_phase_idx = []
+        for mat_idx, mat in enumerate(self.materials):
+            try:
+                phase_material[mat.phases] = mat_idx
+                all_phase_idx.append(mat.phases)
+            except IndexError:
+                raise ValueError(
+                    f"Material {mat.name!r} phases indices {mat.phases} are invalid, "
+                    f"given the number of phases ({self.num_phases})."
+                )
+        if np.any(np.isnan(phase_material)):
+            raise ValueError(
+                "Not all phases are accounted for in the phase type definitions."
+            )  # TODO: test raise
+
+        # check all phase indices form a consequtive range:
+        num_phases_range = set(np.arange(self.num_phases))
+        known_phases = set(np.hstack(all_phase_idx))
+        miss_phase_idx = num_phases_range - known_phases
+        bad_phase_idx = known_phases - num_phases_range
+        if miss_phase_idx:
+            raise ValueError(
+                f"Missing phase indices: {miss_phase_idx}. Bad phase indices: "
+                f"{bad_phase_idx}"
+            )  # TODO: test raise
+
+        return phase_material.astype(int)
+
+    def _get_phase_phase_type(self):
+        phase_phase_type = np.ones(self.num_phases) * np.nan
+        for phase_type_idx, phase_type in enumerate(self.phase_types):
+            phase_phase_type[phase_type.phases] = phase_type_idx
+        if np.any(np.isnan(phase_phase_type)):
+            raise RuntimeError("Not all phases accounted for!")  # TODO: test raise?
+        return phase_phase_type.astype(int)
+
+    def _get_phase_orientation(self):
+        """Get the orientation of each phase, if specified in the phase-type."""
+        phase_ori = np.ones((self.num_phases, 4), dtype=float) * np.nan
+        for phase_type in self.phase_types:
+            for type_idx, phase_i in enumerate(phase_type.phases):
+                if phase_type.orientations is not None:
+                    phase_ori[phase_i] = phase_type.orientations[type_idx]
+        return phase_ori
+
+    def get_interface_map_indices(self, phase_type_A, phase_type_B):
+        """Get an array of integer indices that index the (upper triangle of the) 2D
+        symmetric interface map array, corresponding to a given material pair."""
+
+        # First get phase indices belonging to the two phase types:
+        ptypes = {i.name: i for i in self.phase_types}
+        ptA_phases = ptypes[phase_type_A].phases
+        ptB_phases = ptypes[phase_type_B].phases
+
+        A_idx = np.repeat(ptA_phases, ptB_phases.shape[0])
+        B_idx = np.tile(ptB_phases, ptA_phases.shape[0])
+
+        map_idx = np.vstack((A_idx, B_idx))
+        map_idx_srt = np.sort(map_idx, axis=0)  # map onto upper triangle
+        map_idx_uniq = np.unique(map_idx_srt, axis=1)  # get unique pairs only
+
+        # remove diagonal elements (a phase can't have an interface with itself)
+        map_idx_non_trivial = map_idx_uniq[:, map_idx_uniq[0] != map_idx_uniq[1]]
+
+        return map_idx_non_trivial
+
+    def _get_interface_map(self, upper_tri_only=False):
+        """Generate the num_phases by num_phases symmetric matrix that maps each phase-pair
+        to an interface index."""
+
+        print("Finding interface map matrix...", end="")
+
+        int_map = np.ones((self.num_phases, self.num_phases), dtype=int) * np.nan
+
+        ints_by_phase_type_pair = {}
+        for int_def in self.interfaces:
+            if int_def.phase_types not in ints_by_phase_type_pair:
+                ints_by_phase_type_pair[int_def.phase_types] = []
+            ints_by_phase_type_pair[int_def.phase_types].append(int_def)
+
+        for pt_pair, int_defs in ints_by_phase_type_pair.items():
+
+            names = [i.name for i in int_defs]
+            if len(set(names)) < len(names):
+                raise ValueError(
+                    f"Multiple interface definitions for phase-type pair "
+                    f"{pt_pair} have the same `type_label`."
+                )
+            type_fracs = [i.type_fraction for i in int_defs]
+            any_frac_set = any(i is not None for i in type_fracs)
+            manual_set = [i.is_phase_pairs_set for i in int_defs]
+            any_manual_set = any(manual_set)
+            all_manual_set = all(manual_set)
+            if any_frac_set:
+                if any_manual_set:
+                    raise ValueError(
+                        f"For interface {pt_pair}, specify phase pairs manually for all "
+                        f"defined interfaces using `phase_pairs`, or specify `type_fraction`"
+                        f"for all defined interfaces. You cannot mix them."
+                    )
+
+            all_phase_pairs = self.get_interface_map_indices(*pt_pair).T
+            if any_manual_set:
+                if not all_manual_set:
+                    raise ValueError(
+                        f"For interface {pt_pair}, specify phase pairs manually for all "
+                        f"defined interfaces using `phase_pairs`, or specify `type_fraction`"
+                        f"for all defined interfaces. You cannot mix them."
+                    )
+
+                # check that given phase_pairs combine to the set of all phase_pairs
+                # for this material-material pair:
+                all_given_phase_pairs = np.vstack([i.phase_pairs for i in int_defs])
+
+                # sort by first-phase, then second-phase, for comparison:
+                srt = np.lexsort(all_given_phase_pairs.T[::-1])
+                all_given_phase_pairs = all_given_phase_pairs[srt]
+
+                if all_given_phase_pairs.shape != all_phase_pairs.shape or not np.all(
+                    all_given_phase_pairs == all_phase_pairs
+                ):
+                    raise ValueError(
+                        f"Missing `phase_pairs` for interface {pt_pair}. The following "
+                        f"phase pairs must all be included for this interface: "
+                        f"{all_phase_pairs}"
+                    )
+
+                for int_i in int_defs:
+                    phase_pairs_i = int_i.phase_pairs.T
+                    if phase_pairs_i.size:
+                        int_map[phase_pairs_i[0], phase_pairs_i[1]] = int_i.index
+
+                        if not upper_tri_only:
+                            int_map[phase_pairs_i[1], phase_pairs_i[0]] = int_i.index
+
+            else:
+                # set default type fractions if missing
+                remainder_frac = 1 - sum(i for i in type_fracs if i is not None)
+                if remainder_frac > 0:
+                    num_missing_type_frac = sum(1 for i in type_fracs if i is None)
+                    if num_missing_type_frac == 0:
+                        raise ValueError(
+                            f"For interface {pt_pair}, `type_fraction` for all "
+                            f"defined interfaces must sum to one."
+                        )
+                    remainder_frac_each = remainder_frac / num_missing_type_frac
+                    for i in int_defs:
+                        if i.type_fraction is None:
+                            i.type_fraction = remainder_frac_each
+
+                type_fracs = [i.type_fraction for i in int_defs]
+                if sum(type_fracs) != 1:
+                    raise ValueError(
+                        f"For interface {pt_pair}, `type_fraction` for all "
+                        f"defined interfaces must sum to one."
+                    )
+
+                # assign phase_pairs according to type fractions:
+                num_pairs = all_phase_pairs.shape[0]
+                type_nums_each = [round(i * num_pairs) for i in type_fracs]
+                type_nums = np.cumsum(type_nums_each)
+                if num_pairs % 2 == 1:
+                    type_nums += 1
+
+                shuffle_idx = np.random.choice(num_pairs, size=num_pairs, replace=False)
+                phase_pairs_shuffled = all_phase_pairs[shuffle_idx]
+                phase_pairs_split = np.split(phase_pairs_shuffled, type_nums, axis=0)[:-1]
+                for idx, int_i in enumerate(int_defs):
+                    phase_pairs_i = phase_pairs_split[idx]
+                    int_map[phase_pairs_i[:, 0], phase_pairs_i[:, 1]] = int_i.index
+                    if not upper_tri_only:
+                        int_map[phase_pairs_i[:, 1], phase_pairs_i[:, 0]] = int_i.index
+                    int_i.phase_pairs = phase_pairs_i
+                    int_i.type_fraction = None
+
+        print("done!")
+
+        return int_map
+
+    @property
+    def interface_map_int(self):
+        """Get the interface map as an integer matrix, where NaNs are replaced by -2."""
+        int_map = np.copy(self.interface_map)
+        int_map[np.isnan(int_map)] = -2
+        return int_map.astype(int)
+
+    def get_interface_idx(self):
+        return self.voxel_map.get_interface_idx(self.interface_map_int)
+
+    def get_interface_misorientation(self):
+        return self.voxel_map.get_interface_idx(self.misorientation_matrix)
+
+    def _modify_interface_map(self, phase_A, phase_B, interface_idx):
+        """
+        Parameters
+        ----------
+        phase_A : ndarray
+        phase_B : ndarray
+        interface_idx : ndarray
+
+        """
+        if interface_idx not in range(len(self.interfaces)):
+            raise ValueError(f"Interface index {interface_idx} invalid.")
+        self._interface_map[phase_A, phase_B] = interface_idx
+        self._interface_map[phase_B, phase_A] = interface_idx
+
+    def _validate_interface_map(self):
+        # check no missing interfaces:
+        int_map_indices = np.triu_indices_from(self.interface_map, k=1)
+        int_is_nan = np.isnan(self.interface_map[int_map_indices])
+        phase_idx_int_is_nan = np.vstack(int_map_indices)[:, int_is_nan]
+        if phase_idx_int_is_nan.size:
+            raise GeometryUnassignedPhasePairInterfaceError(
+                f"The following phase-pairs have not been assigned an interface "
+                f"definition: {phase_idx_int_is_nan}."
+            )
+
+    def get_misorientation_matrix(self, degrees=True, overwrite=False):
+        """Given phase type definitions that include orientation lists, get the
+        misorientation matrix between all pairs."""
+
+        if self.misorientation_matrix is not None and not overwrite:
+            print(
+                "Misorientation matrix is already set. Use `overwrite=True` to recompute."
+            )
+            return
+
+        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
+        all_oris = np.ones((self.num_phases, 4)) * np.nan
+        for i in self.phase_types:
+            all_oris[i.phases] = i.orientations
+
+        if np.any(np.isnan(all_oris)):
+            raise RuntimeError(
+                "Not all orientations are accounted for in the phase type definitions."
+            )
+
+        all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
+
+        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
+        for idx in range(self.num_phases):
+            print(
+                f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
+                flush=True,
+            )
+            ori_i = all_oris[idx : idx + 1]
+            other_oris = all_oris[idx + 1 :]
+            if other_oris.size:
+                disori_i = ori_i.disorientation(other_oris).as_axis_angle()[..., -1]
+                misori_matrix[idx, idx + 1 :] = disori_i
+                misori_matrix[idx + 1 :, idx] = disori_i
+
+        if degrees:
+            misori_matrix = np.rad2deg(misori_matrix)
+
+        self._misorientation_matrix = misori_matrix
+        self._misorientation_matrix_is_degrees = degrees
+
+        return misori_matrix
+
+    def get_pyvista_grid(self):
+        """Experimental!"""
+
+        grid = pv.UniformGrid()
+
+        grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
+        grid.spacing = self.size_3D / self.grid_size_3D
+        return grid
+
+    @staticmethod
+    def get_unique_random_seeds(num_phases, size, grid_size, random_seed=None):
+        return DiscreteVoronoi.get_unique_random_seeds(
+            num_regions=num_phases,
+            size=size,
+            grid_size=grid_size,
+            random_seed=random_seed,
+        )
+
+    @staticmethod
+    def assign_phase_material_randomly(
+        num_materials,
+        num_phases,
+        volume_fractions,
+        random_seed=None,
+    ):
+
+        print(
+            "Randomly assigning phases to materials according to volume_fractions...",
+            end="",
+        )
+        rng = np.random.default_rng(seed=random_seed)
+        phase_material = rng.choice(
+            a=num_materials,
+            size=num_phases,
+            p=volume_fractions,
+        )
+        print("done!")
+        return phase_material
+
+    @classmethod
+    def from_voronoi(
+        cls,
+        interfaces,
+        materials,
+        grid_size,
+        size,
+        seeds=None,
+        num_phases=None,
+        random_seed=None,
+        is_periodic=False,
+    ):
+
+        if sum(i is not None for i in (seeds, num_phases)) != 1:
+            raise ValueError(f"Specify exactly one of `seeds` and `num_phases`")
+
+        if seeds is None:
+            vor_map = DiscreteVoronoi.from_random(
+                num_regions=num_phases,
+                grid_size=grid_size,
+                size=size,
+                is_periodic=is_periodic,
+                random_seed=random_seed,
+            )
+            seeds = vor_map.seeds
+
+        else:
+            vor_map = DiscreteVoronoi.from_seeds(
+                region_seeds=seeds,
+                grid_size=grid_size,
+                size=size,
+                is_periodic=is_periodic,
+            )
+
+        return cls(
+            voxel_map=vor_map,
+            materials=materials,
+            interfaces=interfaces,
+            size=size,
+            seeds=seeds,
+            random_seed=random_seed,
+        )
+
+    @classmethod
+    def from_seed_voronoi(
+        cls,
+        seeds,
+        interfaces,
+        materials,
+        grid_size,
+        size,
+        random_seed=None,
+        is_periodic=False,
+    ):
+        return cls.from_voronoi(
+            interfaces=interfaces,
+            materials=materials,
+            grid_size=grid_size,
+            size=size,
+            seeds=seeds,
+            random_seed=random_seed,
+            is_periodic=is_periodic,
+        )
+
+    @classmethod
+    def from_random_voronoi(
+        cls,
+        num_phases,
+        interfaces,
+        materials,
+        grid_size,
+        size,
+        random_seed=None,
+        is_periodic=False,
+    ):
+        return cls.from_voronoi(
+            interfaces=interfaces,
+            materials=materials,
+            grid_size=grid_size,
+            size=size,
+            num_phases=num_phases,
+            random_seed=random_seed,
+            is_periodic=is_periodic,
+        )
+
+    @property
+    def voxel_phase_3D(self):
+        if self.dimension == 3:
+            return self.voxel_phase
+        else:
+            return self.voxel_phase.T[:, :, None]
+
+    @property
+    def voxel_material_3D(self):
+        if self.dimension == 3:
+            return self.voxel_material
+        else:
+            return self.voxel_material.T[:, :, None]
+
+    @property
+    def voxel_interface_idx_3D(self):
+        int_idx = self.get_interface_idx()
+        if self.dimension == 3:
+            return int_idx
+        else:
+            return int_idx.T[:, :, None]
+
+    def show(self):
+        """Experimental!"""
+
+        print("WARNING: experimental!")
+
+        grid = self.get_pyvista_grid()
+
+        grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
+        grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
+        grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
+
+        pl = pv.PlotterITK()
+        pl.add_mesh(grid)
+        pl.show(ui_collapsed=False)
+
+    def write_VTK(self, path):
+
+        grid = self.get_pyvista_grid()
+
+        grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
+        grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
+        grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
+
+        grid.save(path)
+
+    @property
+    def dimension(self):
+        return self.voxel_map.dimension
+
+    @property
+    def grid_size(self):
+        return np.array(self.voxel_map.grid_size)
+
+    @property
+    def grid_size_3D(self):
+        if self.dimension == 2:
+            return np.hstack([self.grid_size[::-1], 1])
+        else:
+            return self.grid_size
+
+    @property
+    def size_3D(self):
+        if self.dimension == 2:
+            return np.hstack([self.size[::-1], self.size[0] / self.grid_size[0]])
+        else:
+            return self.size
+
+    @property
+    def neighbour_voxels(self):
+        return self.voxel_map.neighbour_voxels
+
+    @property
+    def neighbour_list(self):
+        return self.voxel_map.neighbour_list
+
+    @property
+    def interface_map(self):
+        """Get the num_phases-by-num_phases matrix of interface indices."""
+        return self._interface_map
+
+    @property
+    def interface_names(self):
+        return [i.name for i in self.interfaces]
+
+    @property
+    def material_properties(self):
+        return {mat.name: mat.properties for mat in self.materials}
+
+    @property
+    def num_voxels(self):
+        return np.product(self.voxel_phase.size)  # TODO: change to voxel_map.num_voxels?
+
+    @property
+    def phase_num_voxels(self):
+        return self._phase_num_voxels
+
+    @property
+    def num_phases(self):
+        return self._num_phases
+
+    @property
+    def num_materials(self):
+        return len(self.materials)
+
+    @property
+    def material_names(self):
+        return [i.name for i in self.materials]
+
+    @property
+    def target_material_volume_fractions(self):
+        return [i.target_volume_fraction for i in self.materials]
+
+    @property
+    def phase_types(self):
+        """Get all phase types across all materials."""
+        return [j for i in self.materials for j in i.phase_types]
+
+    @property
+    def phase_material(self):
+        """Get the material index of each phase."""
+        return self._phase_material
+
+    @property
+    def phase_phase_type(self):
+        """Get the phase type index of each phase."""
+        return self._phase_phase_type
+
+    @property
+    def phase_orientation(self):
+        """Get the orientation quaternion of each phase."""
+        return self._phase_orientation
+
+    @property
+    def voxel_material(self):
+        """Get the material index of each voxel."""
+        return self.phase_material[self.voxel_phase]
+
+    @property
+    def voxel_phase_type(self):
+        """Get the phase type index of each voxel."""
+        return self.phase_phase_type[self.voxel_phase]
+
+    @property
+    def voxel_orientation(self):
+        """Get the quaternion of each voxel."""
+        return self.phase_orientation[self.voxel_phase]
+
+    @property
+    def material_num_voxels(self):
+        mat_num_vox = []
+        for i in self.materials:
+            num_vox_i = sum(self.phase_num_voxels[j] for j in i.phases)
+            mat_num_vox.append(num_vox_i)
+        return np.array(mat_num_vox)
+
+    @property
+    def phase_type_num_voxels(self):
+        return np.array(
+            [np.sum(self.phase_num_voxels[i.phases]) for i in self.phase_types]
+        )
+
+    @property
+    def material_volume_fractions(self):
+        return np.array([i / self.num_voxels for i in self.material_num_voxels])
+
+    @property
+    def phase_volume_fractions(self):
+        return np.array([i / self.num_voxels for i in self.phase_num_voxels])
+
+    @property
+    def phase_type_volume_fractions(self):
+        return np.array([i / self.num_voxels for i in self.phase_type_num_voxels])
+
+    @property
+    def seeds_grid(self):
+        return np.round(self.grid_size * self.seeds / self.size, decimals=0).astype(int)
+
+    def remove_interface(self, interface_name):
+        """Remove an interface from the geometry. This will invalidate the geometry if
+        the specified interface is referred by any phase-pairs."""
+
+        idx = self.interface_names.index(interface_name)
+        interface = self.interfaces.pop(idx)
+
+        interface_map_tri = np.tril(-np.ones_like(self.interface_map)) + np.triu(
+            self.interface_map
+        )
+        phase_pairs = np.array(np.where(interface_map_tri == idx))
+
+        # set NaNs in interface map:
+        self._interface_map[phase_pairs[0], phase_pairs[1]] = np.nan
+
+        # realign indices in map that succeed the removed interface:
+        self._interface_map[self._interface_map > idx] -= 1
+
+        return interface, phase_pairs
