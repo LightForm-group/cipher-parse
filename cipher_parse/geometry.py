@@ -60,7 +60,7 @@ class CIPHERGeometry:
         if self.size.size != self.dimension:
             raise ValueError(
                 f"`size` ({self.size}) implies {self.size.size} dimensions, but "
-                f"`voxel_phase` implies {self.voxel_phase.dimension} dimensions."
+                f"`voxel_phase` implies {self.voxel_phase.ndim} dimensions."
             )
 
         all_phases = np.unique(self.voxel_phase)
