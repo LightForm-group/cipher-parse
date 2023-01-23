@@ -107,6 +107,9 @@ class CIPHERGeometry:
         self._misorientation_matrix = None
         self._misorientation_matrix_is_degrees = None
 
+        # assigned by `get_grain_boundaries` property:
+        self._grain_boundaries = None
+
     def __eq__(self, other):
         # Note we don't check seeds (not stored in YAML file)
         if not isinstance(other, self.__class__):
@@ -690,8 +693,12 @@ class CIPHERGeometry:
             return self.voxel_material.T[:, :, None]
 
     @property
+    def voxel_interface_idx(self):
+        return self.get_interface_idx()
+
+    @property
     def voxel_interface_idx_3D(self):
-        int_idx = self.get_interface_idx()
+        int_idx = self.voxel_interface_idx
         if self.dimension == 3:
             return int_idx
         else:
@@ -706,7 +713,13 @@ class CIPHERGeometry:
 
     def get_slice(self, slice_index=0, normal_dir="z", data_label="phase"):
 
-        allowed_data = ["phase", "material", "interface_idx", "phase_neighbours"]
+        allowed_data = [
+            "phase",
+            "material",
+            "interface_idx",
+            "phase_neighbours",
+            "grain_boundaries",
+        ]
         if data_label not in allowed_data:
             raise ValueError(f"`data_label` must be one of: {allowed_data}.")
 
@@ -718,6 +731,8 @@ class CIPHERGeometry:
             data = self.voxel_interface_idx_3D
         elif data_label == "phase_neighbours":
             data = self.voxel_phase_neighbours_3D
+        elif data_label == "grain_boundaries":
+            data = self.get_grain_boundary_map(as_3D=True)
 
         if normal_dir == "x":
             data = data[slice_index, :, :]
@@ -896,6 +911,11 @@ class CIPHERGeometry:
     def seeds_grid(self):
         return np.round(self.grid_size * self.seeds / self.size, decimals=0).astype(int)
 
+    def get_grain_boundaries(self):
+        if not self._grain_boundaries:
+            self._grain_boundaries = self.identify_grain_boundaries()
+        return self._grain_boundaries
+
     def remove_interface(self, interface_name):
         """Remove an interface from the geometry. This will invalidate the geometry if
         the specified interface is referred by any phase-pairs."""
@@ -915,3 +935,40 @@ class CIPHERGeometry:
         self._interface_map[self._interface_map > idx] -= 1
 
         return interface, phase_pairs
+
+    def get_grain_boundary_map(self, as_3D=False):
+        voxel_GBs = np.ones_like(self.voxel_phase, dtype=int) * -1
+        GBs = self.get_grain_boundaries()
+        for idx, GB_i in enumerate(GBs):
+            voxel_GBs[GB_i["voxels"]] = idx
+
+        if self.dimension == 3:
+            return voxel_GBs
+        elif as_3D:
+            return voxel_GBs.T[:, :, None]
+
+        return voxel_GBs
+
+    def identify_grain_boundaries(self):
+        grain_boundaries = []
+        for int_idx, interface in enumerate(self.interfaces):
+            for phase_pair in interface.phase_pairs:
+                is_GB = np.any(np.all(self.neighbour_list == phase_pair[:, None], axis=0))
+                if is_GB:
+                    vox_bool = np.logical_and(
+                        np.logical_or(
+                            self.voxel_phase_neighbours == phase_pair[0],
+                            self.voxel_phase_neighbours == phase_pair[1],
+                        ),
+                        self.voxel_interface_idx == int_idx,
+                    )
+                    vox_idx = np.where(vox_bool)
+
+                    grain_boundaries.append(
+                        {
+                            "phase_pair": phase_pair,
+                            "interface_idx": int_idx,
+                            "voxels": vox_idx,
+                        }
+                    )
+        return grain_boundaries
