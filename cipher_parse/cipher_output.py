@@ -111,6 +111,9 @@ def generate_VTI_files_from_VTU_files(
     execute that script."""
 
     script_name = "vtu2vti.py"
+    if len(sampling_dimensions) == 2:
+        sampling_dimensions += [1]
+
     with Path(script_name).open("wt") as fp:
         fp.write(
             dedent(
