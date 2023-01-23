@@ -41,14 +41,31 @@ class VoxelMap:
 
     @property
     def grid_size(self):
-        return self.region_ID.shape
+        return np.array(self.region_ID.shape)
+
+    @property
+    def shape(self):
+        return tuple(self.grid_size)
+
+    @property
+    def spacing(self):
+        return self.size / self.grid_size
+
+    @property
+    def spacing_3D(self):
+        return self.size_3D / self.grid_size_3D
 
     @property
     def num_voxels(self):
         return np.product(self.grid_size)
 
+    def get_coordinates(self):
+        mg_args = [np.arange(i) * j / i for i, j in zip(self.grid_size, self.size)]
+        coords = np.concatenate([i[..., None] for i in np.meshgrid(*mg_args)], axis=-1)
+        return coords
+
     def generate_voxel_mask(self):
-        voxel_mask = np.zeros(self.grid_size, dtype=int)
+        voxel_mask = np.zeros(self.shape, dtype=int)
         return voxel_mask.astype(bool)
 
     def get_num_regions(self):
@@ -216,10 +233,10 @@ class VoxelMap:
             self.region_ID_flat, self.region_ID_right.reshape(-1)
         ]
 
-        interface_idx_above = interface_idx_above_flat.reshape(self.grid_size)
-        interface_idx_below = interface_idx_below_flat.reshape(self.grid_size)
-        interface_idx_left = interface_idx_left_flat.reshape(self.grid_size)
-        interface_idx_right = interface_idx_right_flat.reshape(self.grid_size)
+        interface_idx_above = interface_idx_above_flat.reshape(self.shape)
+        interface_idx_below = interface_idx_below_flat.reshape(self.shape)
+        interface_idx_left = interface_idx_left_flat.reshape(self.shape)
+        interface_idx_right = interface_idx_right_flat.reshape(self.shape)
 
         interface_idx_all = np.concatenate(
             (
@@ -240,8 +257,8 @@ class VoxelMap:
                 self.region_ID_flat,
                 self.region_ID_out.reshape(-1),
             ]
-            interface_idx_in = interface_idx_in_flat.reshape(self.grid_size)
-            interface_idx_out = interface_idx_out_flat.reshape(self.grid_size)
+            interface_idx_in = interface_idx_in_flat.reshape(self.shape)
+            interface_idx_out = interface_idx_out_flat.reshape(self.shape)
 
             interface_idx_all = np.concatenate(
                 (
@@ -278,7 +295,7 @@ class VoxelMap:
         grid = pv.UniformGrid()
 
         grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
-        grid.spacing = self.size_3D / self.grid_size_3D
+        grid.spacing = self.spacing_3D
 
         if include_region_ID:
             grid.cell_data["data"] = self.region_ID.flatten(order="F")

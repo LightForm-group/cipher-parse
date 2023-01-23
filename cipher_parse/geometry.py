@@ -761,21 +761,26 @@ class CIPHERGeometry:
 
     @property
     def grid_size(self):
-        return np.array(self.voxel_map.grid_size)
+        return self.voxel_map.grid_size
 
     @property
     def grid_size_3D(self):
-        if self.dimension == 2:
-            return np.hstack([self.grid_size[::-1], 1])
-        else:
-            return self.grid_size
+        return self.voxel_map.grid_size_3D
 
     @property
     def size_3D(self):
-        if self.dimension == 2:
-            return np.hstack([self.size[::-1], self.size[0] / self.grid_size[0]])
-        else:
-            return self.size
+        return self.voxel_map.size_3D
+
+    @property
+    def spacing(self):
+        return self.voxel_map.spacing
+
+    @property
+    def spacing_3D(self):
+        return self.voxel_map.spacing_3D
+
+    def get_coordinates(self):
+        return self.voxel_map.get_coordinates()
 
     @property
     def voxel_phase_neighbours(self):
