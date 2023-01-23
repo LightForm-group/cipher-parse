@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
+from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.utilities import get_subset_indices, get_time_linear_subset_indices
 from cipher_parse.derived_outputs import num_voxels_per_phase
 

@@ -1,7 +1,10 @@
 from damask import Orientation
+from cipher_parse.material import MaterialDefinition
+from cipher_parse.interface import InterfaceDefinition
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
 from cipher_parse.voxel_map import VoxelMap
 import pyvista as pv
+import numpy as np
 
 from cipher_parse.errors import (
     GeometryDuplicateMaterialNameError,
