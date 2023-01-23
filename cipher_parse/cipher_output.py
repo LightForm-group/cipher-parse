@@ -162,6 +162,7 @@ class CIPHEROutput:
         input_YAML_file_str,
         stdout_file_str,
         incremental_data,
+        quiet=False,
     ):
 
         default_options = {
@@ -182,6 +183,7 @@ class CIPHEROutput:
         self.stdout_file_name = stdout_file_name
         self.stdout_file_str = stdout_file_str
         self.incremental_data = incremental_data
+        self.quiet = quiet
 
         self._cipher_input = None
         self._cipher_stdout = None
@@ -369,7 +371,9 @@ class CIPHEROutput:
     @property
     def cipher_input(self):
         if not self._cipher_input:
-            self._cipher_input = CIPHERInput.from_input_YAML_str(self.input_YAML_file_str)
+            self._cipher_input = CIPHERInput.from_input_YAML_str(
+                self.input_YAML_file_str, quiet=self.quiet
+            )
         return self._cipher_input
 
     @property
@@ -413,7 +417,7 @@ class CIPHEROutput:
         return data
 
     @classmethod
-    def from_JSON(cls, data):
+    def from_JSON(cls, data, quiet=True):
 
         attrs = {
             "directory": data["directory"],
@@ -431,7 +435,7 @@ class CIPHEROutput:
                     as_arr_val = np.array(attrs["incremental_data"][inc_idx][key])
                     attrs["incremental_data"][inc_idx][key] = as_arr_val
 
-        obj = cls(**attrs)
+        obj = cls(**attrs, quiet=quiet)
         return obj
 
     def to_JSON_file(self, path):

@@ -66,6 +66,7 @@ class CIPHERInput:
     components: List
     outputs: List
     solution_parameters: Dict
+    quiet: Optional[bool] = False
 
     def __post_init__(self):
         self._validate()
@@ -119,14 +120,14 @@ class CIPHERInput:
         return data
 
     @classmethod
-    def from_JSON(cls, data):
+    def from_JSON(cls, data, quiet=True):
         data = {
-            "geometry": CIPHERGeometry.from_JSON(data["geometry"]),
+            "geometry": CIPHERGeometry.from_JSON(data["geometry"], quiet=quiet),
             "components": data["components"],
             "outputs": data["outputs"],
             "solution_parameters": data["solution_parameters"],
         }
-        return cls(**data)
+        return cls(**data, quiet=quiet)
 
     @classmethod
     def from_input_YAML_file(cls, path):
@@ -189,7 +190,7 @@ class CIPHERInput:
         }
 
     @classmethod
-    def from_input_YAML_str(cls, file_str):
+    def from_input_YAML_str(cls, file_str, quiet=False):
         """Generate a CIPHERInput object from a CIPHER input YAML file string."""
 
         yaml_dat = cls.read_input_YAML_string(file_str)
@@ -225,6 +226,7 @@ class CIPHERInput:
             interfaces=interfaces,
             voxel_phase=yaml_dat["voxel_phase"],
             size=yaml_dat["size"],
+            quiet=quiet,
         )
 
         attrs = {
@@ -234,7 +236,7 @@ class CIPHERInput:
             "solution_parameters": dict(yaml_dat["solution_parameters"]),
         }
 
-        return cls(**attrs)
+        return cls(**attrs, quiet=quiet)
 
     @classmethod
     def from_voronoi(

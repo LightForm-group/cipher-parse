@@ -3,7 +3,7 @@ import pyvista as pv
 
 
 class VoxelMap:
-    def __init__(self, region_ID, size, is_periodic, region_data=None):
+    def __init__(self, region_ID, size, is_periodic, region_data=None, quiet=False):
         """
         Parameters
         ---------
@@ -15,8 +15,8 @@ class VoxelMap:
         self.size = np.asarray(size)
         self.is_periodic = is_periodic
 
-        self.neighbour_voxels = self.get_neighbour_voxels()
-        self.neighbour_list = self.get_neighbour_list()
+        self.neighbour_voxels = self.get_neighbour_voxels(quiet)
+        self.neighbour_list = self.get_neighbour_list(quiet)
         self.num_regions = self.get_num_regions()
 
         self.region_data = region_data or {}
@@ -143,17 +143,19 @@ class VoxelMap:
 
         return out
 
-    def get_neighbour_voxels(self):
-        print("Finding neighbouring voxels...", end="")
+    def get_neighbour_voxels(self, quiet=False):
+        if not quiet:
+            print("Finding neighbouring voxels...", end="")
         interface_voxels = np.copy(self.region_ID)
         interface_voxels[self.region_ID_bulk] = -1
-        print("done!")
+        if not quiet:
+            print("done!")
         return interface_voxels
 
-    def get_neighbour_list(self):
+    def get_neighbour_list(self, quiet=False):
         """Get the pairs of regions that are neighbours"""
-
-        print("Finding neighbour list...", end="")
+        if not quiet:
+            print("Finding neighbour list...", end="")
         region_boundary_above = np.array(
             [self.region_ID_flat, self.region_ID_above.reshape(-1)]
         )
@@ -194,7 +196,8 @@ class VoxelMap:
             )
 
         neighbours = np.unique(region_boundary_all, axis=1)
-        print("done!")
+        if not quiet:
+            print("done!")
 
         return neighbours
 

@@ -26,12 +26,18 @@ class CIPHERGeometry:
         voxel_phase=None,
         voxel_map=None,
         random_seed=None,
+        quiet=False,
     ):
 
         if sum(i is not None for i in (voxel_phase, voxel_map)) != 1:
             raise ValueError(f"Specify exactly one of `voxel_phase` and `voxel_map`")
         if voxel_map is None:
-            voxel_map = VoxelMap(region_ID=voxel_phase, size=size, is_periodic=True)
+            voxel_map = VoxelMap(
+                region_ID=voxel_phase,
+                size=size,
+                is_periodic=True,
+                quiet=quiet,
+            )
         else:
             voxel_phase = voxel_map.region_ID
 
@@ -80,7 +86,7 @@ class CIPHERGeometry:
 
         self._phase_phase_type = self._get_phase_phase_type()
         self._phase_num_voxels = self._get_phase_num_voxels()
-        self._interface_map = self._get_interface_map()
+        self._interface_map = self._get_interface_map(quiet=quiet)
         self._validate_interface_map()  # TODO: add setter to interface map
 
         self._phase_orientation = self._get_phase_orientation()
@@ -131,7 +137,7 @@ class CIPHERGeometry:
         return data
 
     @classmethod
-    def from_JSON(cls, data):
+    def from_JSON(cls, data, quiet=True):
         data_init = {
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
@@ -140,7 +146,7 @@ class CIPHERGeometry:
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
         }
-        obj = cls(**data_init)
+        obj = cls(**data_init, quiet=quiet)
         obj._misorientation_matrix = np.array(data["misorientation_matrix"])
         obj._misorientation_matrix_is_degrees = np.array(
             data["misorientation_matrix_is_degrees"]
@@ -318,11 +324,12 @@ class CIPHERGeometry:
 
         return map_idx_non_trivial
 
-    def _get_interface_map(self, upper_tri_only=False):
+    def _get_interface_map(self, upper_tri_only=False, quiet=False):
         """Generate the num_phases by num_phases symmetric matrix that maps each phase-pair
         to an interface index."""
 
-        print("Finding interface map matrix...", end="")
+        if not quiet:
+            print("Finding interface map matrix...", end="")
 
         int_map = np.ones((self.num_phases, self.num_phases), dtype=int) * np.nan
 
@@ -427,7 +434,8 @@ class CIPHERGeometry:
                     int_i.phase_pairs = phase_pairs_i
                     int_i.type_fraction = None
 
-        print("done!")
+        if not quiet:
+            print("done!")
 
         return int_map
 
