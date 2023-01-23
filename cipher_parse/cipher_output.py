@@ -516,7 +516,7 @@ class CIPHEROutput:
             if row_labels:
                 df_hist_i[row_label_name] = str(row_labels[idx])
 
-            df_hist_all = df_hist_all.append(df_hist_i)
+            df_hist_all = pd.concat([df_hist_all, df_hist_i])
 
             if max_phase_size_i > max_phase_size_all:
                 max_phase_size_all = max_phase_size_i
