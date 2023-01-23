@@ -1,13 +1,12 @@
 from damask import Orientation
 import pyvista as pv
 import numpy as np
+import plotly.express as px
+
 from cipher_parse.material import MaterialDefinition
 from cipher_parse.interface import InterfaceDefinition
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
 from cipher_parse.voxel_map import VoxelMap
-import pyvista as pv
-import numpy as np
-
 from cipher_parse.errors import (
     GeometryDuplicateMaterialNameError,
     GeometryExcessTargetVolumeFractionError,
@@ -698,6 +697,39 @@ class CIPHERGeometry:
         else:
             return int_idx.T[:, :, None]
 
+    @property
+    def voxel_phase_neighbours_3D(self):
+        if self.dimension == 3:
+            return self.voxel_phase_neighbours
+        else:
+            return self.voxel_phase_neighbours.T[:, :, None]
+
+    def get_slice(self, slice_index=0, normal_dir="z", data_label="phase"):
+
+        allowed_data = ["phase", "material", "interface_idx", "phase_neighbours"]
+        if data_label not in allowed_data:
+            raise ValueError(f"`data_label` must be one of: {allowed_data}.")
+
+        if data_label == "phase":
+            data = self.voxel_phase_3D
+        elif data_label == "material":
+            data = self.voxel_material_3D
+        elif data_label == "interface_idx":
+            data = self.voxel_interface_idx_3D
+        elif data_label == "phase_neighbours":
+            data = self.voxel_phase_neighbours_3D
+
+        if normal_dir == "x":
+            data = data[slice_index, :, :]
+        elif normal_dir == "y":
+            data = data[:, slice_index, :]
+        elif normal_dir == "z":
+            data = data[:, :, slice_index]
+        return data
+
+    def show_slice(self, slice_index=0, normal_dir="z", data_label="phase"):
+        return px.imshow(self.get_slice(slice_index, normal_dir, data_label))
+
     def show(self):
         """Experimental!"""
 
@@ -746,7 +778,7 @@ class CIPHERGeometry:
             return self.size
 
     @property
-    def neighbour_voxels(self):
+    def voxel_phase_neighbours(self):
         return self.voxel_map.neighbour_voxels
 
     @property
