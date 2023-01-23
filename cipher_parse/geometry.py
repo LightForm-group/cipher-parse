@@ -1,4 +1,6 @@
 from damask import Orientation
+import pyvista as pv
+import numpy as np
 from cipher_parse.material import MaterialDefinition
 from cipher_parse.interface import InterfaceDefinition
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
@@ -26,8 +28,17 @@ class CIPHERGeometry:
         voxel_phase=None,
         voxel_map=None,
         random_seed=None,
+        allow_missing_phases=False,
         quiet=False,
     ):
+        """
+        Parameters
+        ----------
+
+        allow_missing_phases : bool, optional
+            If True, allow references to phases that do not appear in the voxel map.
+
+        """
 
         if sum(i is not None for i in (voxel_phase, voxel_map)) != 1:
             raise ValueError(f"Specify exactly one of `voxel_phase` and `voxel_map`")
@@ -50,6 +61,7 @@ class CIPHERGeometry:
         self.interfaces = interfaces
         self.random_seed = random_seed
         self.size = np.asarray(size)
+        self.allow_missing_phases = allow_missing_phases
 
         for i in self.materials:
             i._geometry = self
@@ -63,14 +75,15 @@ class CIPHERGeometry:
                 f"`voxel_phase` implies {self.voxel_phase.ndim} dimensions."
             )
 
-        all_phases = np.unique(self.voxel_phase)
+        all_phases = self.present_phases
         self._num_phases = all_phases.size
 
-        if not np.all(all_phases == np.arange(self.num_phases)):
-            raise GeometryVoxelPhaseError(
-                "`voxel_phase` must be an array of consecutive integers starting from "
-                "zero."
-            )
+        if not allow_missing_phases:
+            if not np.all(all_phases == np.arange(self.num_phases)):
+                raise GeometryVoxelPhaseError(
+                    "`voxel_phase` must be an array of consecutive integers starting from "
+                    "zero."
+                )
 
         if len(set(self.material_names)) < self.num_materials:
             raise GeometryDuplicateMaterialNameError(
@@ -127,6 +140,7 @@ class CIPHERGeometry:
             "random_seed": self.random_seed,
             "misorientation_matrix": self.misorientation_matrix,
             "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
+            "allow_missing_phases": self.allow_missing_phases,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
@@ -145,6 +159,7 @@ class CIPHERGeometry:
             "seeds": np.array(data["seeds"]),
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
+            "allow_missing_phases": data.get("allow_missing_phases", False),
         }
         obj = cls(**data_init, quiet=quiet)
         obj._misorientation_matrix = np.array(data["misorientation_matrix"])
@@ -152,6 +167,21 @@ class CIPHERGeometry:
             data["misorientation_matrix_is_degrees"]
         )
         return obj
+
+    @property
+    def present_phases(self):
+        return np.unique(self.voxel_phase)
+
+    @property
+    def missing_phases(self):
+        return np.array(list(set(self.known_phases) - set(self.present_phases)))
+
+    @property
+    def known_phases(self):
+        phases = []
+        for mat in self.materials:
+            phases.append(mat.phases)
+        return np.concatenate(phases)
 
     @property
     def interfaces(self):
@@ -174,7 +204,7 @@ class CIPHERGeometry:
         return np.array(
             [
                 np.sum(self.voxel_phase == phase_idx)
-                for phase_idx in range(self.num_phases)
+                for phase_idx in range(self.num_known_phases)
             ]
         )
 
@@ -257,7 +287,7 @@ class CIPHERGeometry:
             mat.assign_phases(mat_phases)
 
     def _get_phase_material(self):
-        phase_material = np.ones(self.num_phases) * np.nan
+        phase_material = np.ones(self.num_known_phases) * np.nan
         all_phase_idx = []
         for mat_idx, mat in enumerate(self.materials):
             try:
@@ -287,7 +317,7 @@ class CIPHERGeometry:
         return phase_material.astype(int)
 
     def _get_phase_phase_type(self):
-        phase_phase_type = np.ones(self.num_phases) * np.nan
+        phase_phase_type = np.ones(self.num_known_phases) * np.nan
         for phase_type_idx, phase_type in enumerate(self.phase_types):
             phase_phase_type[phase_type.phases] = phase_type_idx
         if np.any(np.isnan(phase_phase_type)):
@@ -331,7 +361,9 @@ class CIPHERGeometry:
         if not quiet:
             print("Finding interface map matrix...", end="")
 
-        int_map = np.ones((self.num_phases, self.num_phases), dtype=int) * np.nan
+        int_map = (
+            np.ones((self.num_known_phases, self.num_known_phases), dtype=int) * np.nan
+        )
 
         ints_by_phase_type_pair = {}
         for int_def in self.interfaces:
@@ -745,6 +777,10 @@ class CIPHERGeometry:
     @property
     def num_phases(self):
         return self._num_phases
+
+    @property
+    def num_known_phases(self):
+        return len(self.known_phases)
 
     @property
     def num_materials(self):
