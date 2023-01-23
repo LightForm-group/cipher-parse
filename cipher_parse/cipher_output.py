@@ -803,3 +803,20 @@ class CIPHEROutput:
         fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
 
         return fig
+
+    def get_geometry(self, inc_data_index):
+        start_geom = self.cipher_input.geometry
+
+        voxel_phase = self.incremental_data[inc_data_index]["phaseid"]
+        if start_geom.dimension == 2:
+            voxel_phase = voxel_phase[:, :, 0]
+
+        geom = CIPHERGeometry(
+            materials=start_geom.materials,
+            interfaces=start_geom.interfaces,
+            size=start_geom.size,
+            voxel_phase=voxel_phase,
+            allow_missing_phases=True,
+            quiet=True,
+        )
+        return geom
