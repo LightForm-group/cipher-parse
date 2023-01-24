@@ -3,14 +3,13 @@ import pytest
 
 import numpy as np
 from cipher_parse.cipher_input import (
-    CIPHERGeometry,
     CIPHERInput,
-    InterfaceDefinition,
-    MaterialDefinition,
-    PhaseTypeDefinition,
     compress_1D_array_string,
     decompress_1D_array_string,
 )
+from cipher_parse.geometry import CIPHERGeometry
+from cipher_parse.material import MaterialDefinition, PhaseTypeDefinition
+from cipher_parse.interface import InterfaceDefinition
 from cipher_parse.discrete_voronoi import DiscreteVoronoi
 from cipher_parse.errors import (
     GeometryDuplicateMaterialNameError,
