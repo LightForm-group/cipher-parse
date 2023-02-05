@@ -151,13 +151,23 @@ class CIPHERGeometry:
             "misorientation_matrix": self.misorientation_matrix,
             "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
             "allow_missing_phases": self.allow_missing_phases,
+            "grain_boundaries": self._grain_boundaries,
             "time": self.time,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
             data["seeds"] = data["seeds"].tolist()
             data["voxel_phase"] = data["voxel_phase"].tolist()
-            data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
+            if data["misorientation_matrix"] is not None:
+                data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
+            for phase_pair in data.get("grain_boundaries") or []:
+                GB = data["grain_boundaries"][phase_pair]
+                data["grain_boundaries"][phase_pair] = {
+                    "interface_idx": GB["interface_idx"],
+                    "voxel_indices": list(i.tolist() for i in GB["voxel_indices"]),
+                    "voxel_coordinates": GB["voxel_coordinates"].tolist(),
+                    "centroid": GB["centroid"].tolist(),
+                }
 
         return data
 
@@ -173,11 +183,21 @@ class CIPHERGeometry:
             "allow_missing_phases": data.get("allow_missing_phases", False),
             "time": data.get("time"),
         }
+        GBs = {}
+        for phase_pair in data.get("grain_boundaries") or []:
+            GB = data["grain_boundaries"][phase_pair]
+            GBs[phase_pair] = {
+                "interface_idx": GB["interface_idx"],
+                "voxel_indices": tuple(np.array(i) for i in GB["voxel_indices"]),
+                "voxel_coordinates": np.array(GB["voxel_coordinates"]),
+                "centroid": np.array(GB["centroid"]),
+            }
         obj = cls(**data_init, quiet=quiet)
         obj._misorientation_matrix = np.array(data["misorientation_matrix"])
         obj._misorientation_matrix_is_degrees = np.array(
             data["misorientation_matrix_is_degrees"]
         )
+        obj._grain_boundaries = GBs or None
         return obj
 
     @property

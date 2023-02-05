@@ -438,8 +438,10 @@ class CIPHEROutput:
                     attrs["incremental_data"][inc_idx][key] = as_arr_val
 
         obj = cls(**attrs, quiet=quiet)
-        geoms = [CIPHERGeometry.from_JSON(i, quiet=quiet) for i in data.get("geometries")]
-        obj._geometries = geoms
+        geoms = [
+            CIPHERGeometry.from_JSON(i, quiet=quiet) for i in data.get("geometries", [])
+        ]
+        obj._geometries = geoms or None
 
         return obj
 
