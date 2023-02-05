@@ -29,6 +29,7 @@ class CIPHERGeometry:
         random_seed=None,
         allow_missing_phases=False,
         quiet=False,
+        time=None,
     ):
         """
         Parameters
@@ -61,6 +62,7 @@ class CIPHERGeometry:
         self.random_seed = random_seed
         self.size = np.asarray(size)
         self.allow_missing_phases = allow_missing_phases
+        self.time = time
 
         for i in self.materials:
             i._geometry = self
@@ -97,7 +99,16 @@ class CIPHERGeometry:
         self._check_interface_phase_pairs()
 
         self._phase_phase_type = self._get_phase_phase_type()
-        self._phase_num_voxels = self._get_phase_num_voxels()
+
+        # assigned by calculate_* methods on first call to corresponding get_* methods:
+        self._phase_voxels = None
+        self._phase_num_voxels = None
+        self._phase_voxel_indices = None
+        self._phase_voxel_coordinates = None
+        self._phase_voxel_centroids = None
+        self._grain_boundaries = None
+        self._grain_boundary_centroids = None
+
         self._interface_map = self._get_interface_map(quiet=quiet)
         self._validate_interface_map()  # TODO: add setter to interface map
 
@@ -106,9 +117,6 @@ class CIPHERGeometry:
         # assigned by `get_misorientation_matrix`:
         self._misorientation_matrix = None
         self._misorientation_matrix_is_degrees = None
-
-        # assigned by `get_grain_boundaries` property:
-        self._grain_boundaries = None
 
     def __eq__(self, other):
         # Note we don't check seeds (not stored in YAML file)
@@ -143,6 +151,7 @@ class CIPHERGeometry:
             "misorientation_matrix": self.misorientation_matrix,
             "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
             "allow_missing_phases": self.allow_missing_phases,
+            "time": self.time,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
@@ -162,6 +171,7 @@ class CIPHERGeometry:
             "voxel_phase": np.array(data["voxel_phase"]),
             "random_seed": data["random_seed"],
             "allow_missing_phases": data.get("allow_missing_phases", False),
+            "time": data.get("time"),
         }
         obj = cls(**data_init, quiet=quiet)
         obj._misorientation_matrix = np.array(data["misorientation_matrix"])
@@ -202,12 +212,113 @@ class CIPHERGeometry:
     def misorientation_matrix_is_degrees(self):
         return self._misorientation_matrix_is_degrees
 
-    def _get_phase_num_voxels(self):
-        return np.array(
+    def get_phase_voxels(self):
+        if self._phase_voxels is None:
+            self._calculate_phase_voxels()
+        return self._phase_voxels
+
+    def get_phase_num_voxels(self):
+        if self._phase_num_voxels is None:
+            self._calculate_phase_num_voxels()
+        return self._phase_num_voxels
+
+    def get_phase_voxel_indices(self):
+        if self._phase_voxel_indices is None:
+            self._calculate_phase_voxel_indices()
+        return self._phase_voxel_indices
+
+    def get_phase_voxel_coordinates(self):
+        if self._phase_voxel_coordinates is None:
+            self._calculate_phase_voxel_coordinates()
+        return self._phase_voxel_coordinates
+
+    def get_phase_voxel_centroids(self):
+        if self._phase_voxel_centroids is None:
+            self._calculate_phase_voxel_centroids()
+        return self._phase_voxel_centroids
+
+    def get_grain_boundaries(self):
+        if self._grain_boundaries is None:
+            self._calculate_grain_boundaries()
+        return self._grain_boundaries
+
+    def get_grain_boundary_centroids(self):
+        if self._grain_boundary_centroids is None:
+            self._calculate_grain_boundary_centroids()
+        return self._grain_boundary_centroids
+
+    def _calculate_phase_voxels(self):
+        self._phase_voxels = [
+            self.voxel_phase == phase_idx for phase_idx in range(self.num_known_phases)
+        ]
+
+    def _calculate_phase_num_voxels(self):
+        self._phase_num_voxels = np.array([np.sum(i) for i in self.get_phase_voxels()])
+
+    def _calculate_phase_voxel_indices(self):
+        self._phase_voxel_indices = [np.where(i) for i in self.get_phase_voxels()]
+
+    def _calculate_phase_voxel_coordinates(self):
+        self._phase_voxel_coordinates = [
+            self.voxel_map.coordinates[i] for i in self.get_phase_voxel_indices()
+        ]
+
+    def _calculate_phase_voxel_centroids(self):
+        self._phase_voxel_centroids = np.array(
             [
-                np.sum(self.voxel_phase == phase_idx)
-                for phase_idx in range(self.num_known_phases)
+                np.mean(i, axis=0) if i.size else np.ones((self.dimension,)) * np.nan
+                for i in self.get_phase_voxel_coordinates()
             ]
+        )
+
+    def _calculate_grain_boundaries(self):
+        grain_boundaries = {}
+        tot_num_calcs = sum(i.phase_pairs.shape[0] for i in self.interfaces)
+        calc_count = 0
+        report_each_pc = 5
+        num_iter_per_report = np.ceil(tot_num_calcs * report_each_pc / 100)
+        print(f"Identifying grain boundaries...", flush=True)
+        for int_idx, interface in enumerate(self.interfaces):
+            for phase_pair in interface.phase_pairs:
+                calc_count += 1
+                if calc_count % num_iter_per_report == 0:
+                    frac_done = (1 + calc_count) / tot_num_calcs * 100
+                    print(f"Identifying grain boundaries: {frac_done:.0f}%.", flush=True)
+                is_GB = np.any(np.all(self.neighbour_list == phase_pair[:, None], axis=0))
+                if is_GB:
+                    vox_bool = self.voxel_map.get_region_boundary_voxels(
+                        phase_pair[0], phase_pair[1]
+                    )
+                    vox_idx = np.where(vox_bool)
+
+                    # remove edge GB voxels:
+                    for gs_idx, i in enumerate(self.grid_size):
+                        not_edge_idx = np.logical_not(
+                            np.logical_or(vox_idx[gs_idx] == 0, vox_idx[gs_idx] == i - 1)
+                        )
+                        vox_idx = list(vox_idx)
+                        for j_idx, _ in enumerate(vox_idx):
+                            vox_idx[j_idx] = vox_idx[j_idx][not_edge_idx]
+
+                    vox_idx = tuple(vox_idx)
+                    if not vox_idx[0].size:
+                        continue
+
+                    vox_coords = self.voxel_map.coordinates[vox_idx]
+                    GB_centroid = np.mean(vox_coords, axis=0)
+
+                    grain_boundaries[(phase_pair[0], phase_pair[1])] = {
+                        "interface_idx": int_idx,
+                        "voxel_indices": vox_idx,
+                        "voxel_coordinates": vox_coords,
+                        "centroid": GB_centroid,
+                    }
+        print(f"Finished grain boundaries.", flush=True)
+        self._grain_boundaries = grain_boundaries
+
+    def _calculate_grain_boundary_centroids(self):
+        self._grain_boundary_centroids = np.concatenate(
+            [i["centroid"][None] for i in self.get_grain_boundaries().values()], axis=0
         )
 
     def _ensure_phase_assignment(self, random_seed):
@@ -711,7 +822,7 @@ class CIPHERGeometry:
         else:
             return self.voxel_phase_neighbours.T[:, :, None]
 
-    def get_slice(self, slice_index=0, normal_dir="z", data_label="phase"):
+    def get_slice(self, slice_index=0, normal_dir="z", data_label="phase", include=None):
 
         allowed_data = [
             "phase",
@@ -734,16 +845,47 @@ class CIPHERGeometry:
         elif data_label == "grain_boundaries":
             data = self.get_grain_boundary_map(as_3D=True)
 
+        data = np.copy(data)
         if normal_dir == "x":
             data = data[slice_index, :, :]
         elif normal_dir == "y":
             data = data[:, slice_index, :]
         elif normal_dir == "z":
             data = data[:, :, slice_index]
+
+        if include:
+            include_mask = data == include[0]
+            for i in include[1:]:
+                include_mask = np.logical_or(include_mask, data == i)
+
+            data[~include_mask] = -10
+
         return data
 
-    def show_slice(self, slice_index=0, normal_dir="z", data_label="phase"):
-        return px.imshow(self.get_slice(slice_index, normal_dir, data_label))
+    def show_slice(
+        self,
+        slice_index=0,
+        normal_dir="z",
+        data_label="phase",
+        include=None,
+        phase_centroids=False,
+        **kwargs,
+    ):
+        fig = px.imshow(
+            self.get_slice(slice_index, normal_dir, data_label, include),
+            color_continuous_scale="viridis",
+            **kwargs,
+        )
+        if phase_centroids:
+            # TODO fix for 3D?
+            cents = self.get_phase_voxel_centroids()
+            fig.add_scatter(
+                x=cents[:, 1],
+                y=cents[:, 0],
+                text=np.arange(cents.shape[0]),
+                mode="markers",
+            )
+        return fig
 
     def show(self):
         """Experimental!"""
@@ -821,6 +963,10 @@ class CIPHERGeometry:
     @property
     def num_voxels(self):
         return np.product(self.voxel_phase.size)  # TODO: change to voxel_map.num_voxels?
+
+    @property
+    def phase_voxels(self):
+        return self._phase_voxels
 
     @property
     def phase_num_voxels(self):
@@ -911,11 +1057,6 @@ class CIPHERGeometry:
     def seeds_grid(self):
         return np.round(self.grid_size * self.seeds / self.size, decimals=0).astype(int)
 
-    def get_grain_boundaries(self):
-        if not self._grain_boundaries:
-            self._grain_boundaries = self.identify_grain_boundaries()
-        return self._grain_boundaries
-
     def remove_interface(self, interface_name):
         """Remove an interface from the geometry. This will invalidate the geometry if
         the specified interface is referred by any phase-pairs."""
@@ -937,10 +1078,10 @@ class CIPHERGeometry:
         return interface, phase_pairs
 
     def get_grain_boundary_map(self, as_3D=False):
-        voxel_GBs = np.ones_like(self.voxel_phase, dtype=int) * -1
-        GBs = self.get_grain_boundaries()
+        voxel_GBs = np.ones_like(self.voxel_phase, dtype=int) * -10
+        GBs = self.get_grain_boundaries().values()
         for idx, GB_i in enumerate(GBs):
-            voxel_GBs[GB_i["voxels"]] = idx
+            voxel_GBs[GB_i["voxel_indices"]] = idx
 
         if self.dimension == 3:
             return voxel_GBs
@@ -948,27 +1089,3 @@ class CIPHERGeometry:
             return voxel_GBs.T[:, :, None]
 
         return voxel_GBs
-
-    def identify_grain_boundaries(self):
-        grain_boundaries = []
-        for int_idx, interface in enumerate(self.interfaces):
-            for phase_pair in interface.phase_pairs:
-                is_GB = np.any(np.all(self.neighbour_list == phase_pair[:, None], axis=0))
-                if is_GB:
-                    vox_bool = np.logical_and(
-                        np.logical_or(
-                            self.voxel_phase_neighbours == phase_pair[0],
-                            self.voxel_phase_neighbours == phase_pair[1],
-                        ),
-                        self.voxel_interface_idx == int_idx,
-                    )
-                    vox_idx = np.where(vox_bool)
-
-                    grain_boundaries.append(
-                        {
-                            "phase_pair": phase_pair,
-                            "interface_idx": int_idx,
-                            "voxels": vox_idx,
-                        }
-                    )
-        return grain_boundaries

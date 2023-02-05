@@ -31,6 +31,8 @@ class VoxelMap:
                 )
             self.region_data[k] = v
 
+        self._coordinates = None  # assigned by `get_coordinates`
+
     @property
     def region_ID_flat(self):
         return self.region_ID.reshape(-1)
@@ -59,7 +61,13 @@ class VoxelMap:
     def num_voxels(self):
         return np.product(self.grid_size)
 
-    def get_coordinates(self):
+    @property
+    def coordinates(self):
+        if self._coordinates is None:
+            self._coordinates = self._get_coordinates()
+        return self._coordinates
+
+    def _get_coordinates(self):
         mg_args = [np.arange(i) * j / i for i, j in zip(self.grid_size, self.size)]
         coords = np.concatenate([i[..., None] for i in np.meshgrid(*mg_args)], axis=-1)
         return coords
@@ -159,6 +167,35 @@ class VoxelMap:
             out = np.logical_and(out, np.logical_not(self.region_ID_diff_depth))
 
         return out
+
+    def get_region_boundary_voxels(self, r1: int, r2: int):
+        r1_vox = (self.region_ID == r1).astype(int)
+        r2_vox = (self.region_ID == r2).astype(int)
+        overlap = np.concatenate(
+            [
+                (r1_vox + np.roll(r2_vox, shift=1, axis=0) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=1, axis=0) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=-1, axis=0) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=-1, axis=0) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=1, axis=1) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=1, axis=1) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=-1, axis=1) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=-1, axis=1) == 2)[None],
+            ]
+        )
+        if self.dimension == 3:
+            overlap = np.concatenate(
+                [
+                    overlap,
+                    (r1_vox + np.roll(r2_vox, shift=1, axis=2) == 2)[None],
+                    (r2_vox + np.roll(r1_vox, shift=1, axis=2) == 2)[None],
+                    (r1_vox + np.roll(r2_vox, shift=-1, axis=2) == 2)[None],
+                    (r2_vox + np.roll(r1_vox, shift=-1, axis=2) == 2)[None],
+                ]
+            )
+
+        boundary_vox = np.sum(overlap, axis=0) > 0
+        return boundary_vox
 
     def get_neighbour_voxels(self, quiet=False):
         if not quiet:
