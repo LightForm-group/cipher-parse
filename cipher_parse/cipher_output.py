@@ -849,7 +849,7 @@ class CIPHEROutput:
     def set_all_geometries(self):
         if self._geometries is not None:
             raise ValueError("Geometries are already set.")
-        self._geometries += [i for i in self.get_all_geometries(include_initial=True)]
+        self._geometries = [i for i in self.get_all_geometries(include_initial=True)]
 
     @property
     def geometries(self):
