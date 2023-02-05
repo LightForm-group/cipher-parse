@@ -849,7 +849,14 @@ class CIPHEROutput:
     def set_all_geometries(self):
         if self._geometries is not None:
             raise ValueError("Geometries are already set.")
-        self._geometries = [i for i in self.get_all_geometries(include_initial=False)]
+        self._geometries += [i for i in self.get_all_geometries(include_initial=True)]
+
+    @property
+    def geometries(self):
+        if self._geometries is not None:
+            return self._geometries
+        else:
+            raise ValueError("Run `set_all_geometries` first.")
 
     def show_slice_evolution(
         self,
@@ -861,7 +868,7 @@ class CIPHEROutput:
     ):
         slices = []
         times = []
-        for geom in self.get_all_geometries():
+        for geom in self.geometries:
             slices.append(
                 geom.get_slice(slice_index, normal_dir, data_label, include)[None]
             )
