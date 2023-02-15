@@ -3,7 +3,7 @@ import pyvista as pv
 
 
 class VoxelMap:
-    def __init__(self, region_ID, size, is_periodic, region_data=None):
+    def __init__(self, region_ID, size, is_periodic, region_data=None, quiet=False):
         """
         Parameters
         ---------
@@ -15,8 +15,8 @@ class VoxelMap:
         self.size = np.asarray(size)
         self.is_periodic = is_periodic
 
-        self.neighbour_voxels = self.get_neighbour_voxels()
-        self.neighbour_list = self.get_neighbour_list()
+        self.neighbour_voxels = self.get_neighbour_voxels(quiet)
+        self.neighbour_list = self.get_neighbour_list(quiet)
         self.num_regions = self.get_num_regions()
 
         self.region_data = region_data or {}
@@ -31,6 +31,8 @@ class VoxelMap:
                 )
             self.region_data[k] = v
 
+        self._coordinates = None  # assigned by `get_coordinates`
+
     @property
     def region_ID_flat(self):
         return self.region_ID.reshape(-1)
@@ -41,14 +43,37 @@ class VoxelMap:
 
     @property
     def grid_size(self):
-        return self.region_ID.shape
+        return np.array(self.region_ID.shape)
+
+    @property
+    def shape(self):
+        return tuple(self.grid_size)
+
+    @property
+    def spacing(self):
+        return self.size / self.grid_size
+
+    @property
+    def spacing_3D(self):
+        return self.size_3D / self.grid_size_3D
 
     @property
     def num_voxels(self):
         return np.product(self.grid_size)
 
+    @property
+    def coordinates(self):
+        if self._coordinates is None:
+            self._coordinates = self._get_coordinates()
+        return self._coordinates
+
+    def _get_coordinates(self):
+        mg_args = [np.arange(i) * j / i for i, j in zip(self.grid_size, self.size)]
+        coords = np.concatenate([i[..., None] for i in np.meshgrid(*mg_args)], axis=-1)
+        return coords
+
     def generate_voxel_mask(self):
-        voxel_mask = np.zeros(self.grid_size, dtype=int)
+        voxel_mask = np.zeros(self.shape, dtype=int)
         return voxel_mask.astype(bool)
 
     def get_num_regions(self):
@@ -143,17 +168,48 @@ class VoxelMap:
 
         return out
 
-    def get_neighbour_voxels(self):
-        print("Finding neighbouring voxels...", end="")
+    def get_region_boundary_voxels(self, r1: int, r2: int):
+        r1_vox = (self.region_ID == r1).astype(int)
+        r2_vox = (self.region_ID == r2).astype(int)
+        overlap = np.concatenate(
+            [
+                (r1_vox + np.roll(r2_vox, shift=1, axis=0) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=1, axis=0) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=-1, axis=0) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=-1, axis=0) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=1, axis=1) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=1, axis=1) == 2)[None],
+                (r1_vox + np.roll(r2_vox, shift=-1, axis=1) == 2)[None],
+                (r2_vox + np.roll(r1_vox, shift=-1, axis=1) == 2)[None],
+            ]
+        )
+        if self.dimension == 3:
+            overlap = np.concatenate(
+                [
+                    overlap,
+                    (r1_vox + np.roll(r2_vox, shift=1, axis=2) == 2)[None],
+                    (r2_vox + np.roll(r1_vox, shift=1, axis=2) == 2)[None],
+                    (r1_vox + np.roll(r2_vox, shift=-1, axis=2) == 2)[None],
+                    (r2_vox + np.roll(r1_vox, shift=-1, axis=2) == 2)[None],
+                ]
+            )
+
+        boundary_vox = np.sum(overlap, axis=0) > 0
+        return boundary_vox
+
+    def get_neighbour_voxels(self, quiet=False):
+        if not quiet:
+            print("Finding neighbouring voxels...", end="")
         interface_voxels = np.copy(self.region_ID)
         interface_voxels[self.region_ID_bulk] = -1
-        print("done!")
+        if not quiet:
+            print("done!")
         return interface_voxels
 
-    def get_neighbour_list(self):
+    def get_neighbour_list(self, quiet=False):
         """Get the pairs of regions that are neighbours"""
-
-        print("Finding neighbour list...", end="")
+        if not quiet:
+            print("Finding neighbour list...", end="")
         region_boundary_above = np.array(
             [self.region_ID_flat, self.region_ID_above.reshape(-1)]
         )
@@ -194,7 +250,8 @@ class VoxelMap:
             )
 
         neighbours = np.unique(region_boundary_all, axis=1)
-        print("done!")
+        if not quiet:
+            print("done!")
 
         return neighbours
 
@@ -213,10 +270,10 @@ class VoxelMap:
             self.region_ID_flat, self.region_ID_right.reshape(-1)
         ]
 
-        interface_idx_above = interface_idx_above_flat.reshape(self.grid_size)
-        interface_idx_below = interface_idx_below_flat.reshape(self.grid_size)
-        interface_idx_left = interface_idx_left_flat.reshape(self.grid_size)
-        interface_idx_right = interface_idx_right_flat.reshape(self.grid_size)
+        interface_idx_above = interface_idx_above_flat.reshape(self.shape)
+        interface_idx_below = interface_idx_below_flat.reshape(self.shape)
+        interface_idx_left = interface_idx_left_flat.reshape(self.shape)
+        interface_idx_right = interface_idx_right_flat.reshape(self.shape)
 
         interface_idx_all = np.concatenate(
             (
@@ -237,8 +294,8 @@ class VoxelMap:
                 self.region_ID_flat,
                 self.region_ID_out.reshape(-1),
             ]
-            interface_idx_in = interface_idx_in_flat.reshape(self.grid_size)
-            interface_idx_out = interface_idx_out_flat.reshape(self.grid_size)
+            interface_idx_in = interface_idx_in_flat.reshape(self.shape)
+            interface_idx_out = interface_idx_out_flat.reshape(self.shape)
 
             interface_idx_all = np.concatenate(
                 (
@@ -275,7 +332,7 @@ class VoxelMap:
         grid = pv.UniformGrid()
 
         grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
-        grid.spacing = self.size_3D / self.grid_size_3D
+        grid.spacing = self.spacing_3D
 
         if include_region_ID:
             grid.cell_data["data"] = self.region_ID.flatten(order="F")

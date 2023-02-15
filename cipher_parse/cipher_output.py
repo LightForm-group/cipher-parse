@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
+from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.utilities import get_subset_indices, get_time_linear_subset_indices
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
@@ -110,6 +111,9 @@ def generate_VTI_files_from_VTU_files(
     execute that script."""
 
     script_name = "vtu2vti.py"
+    if len(sampling_dimensions) == 2:
+        sampling_dimensions += [1]
+
     with Path(script_name).open("wt") as fp:
         fp.write(
             dedent(
@@ -158,6 +162,7 @@ class CIPHEROutput:
         input_YAML_file_str,
         stdout_file_str,
         incremental_data,
+        quiet=False,
     ):
 
         default_options = {
@@ -178,9 +183,11 @@ class CIPHEROutput:
         self.stdout_file_name = stdout_file_name
         self.stdout_file_str = stdout_file_str
         self.incremental_data = incremental_data
+        self.quiet = quiet
 
         self._cipher_input = None
         self._cipher_stdout = None
+        self._geometries = None  # assigned by set_geometries
 
         if (
             options.get("VTU_files_time_interval") is not None
@@ -365,7 +372,9 @@ class CIPHEROutput:
     @property
     def cipher_input(self):
         if not self._cipher_input:
-            self._cipher_input = CIPHERInput.from_input_YAML_str(self.input_YAML_file_str)
+            self._cipher_input = CIPHERInput.from_input_YAML_str(
+                self.input_YAML_file_str, quiet=self.quiet
+            )
         return self._cipher_input
 
     @property
@@ -398,6 +407,7 @@ class CIPHEROutput:
             "stdout_file_name": self.stdout_file_name,
             "stdout_file_str": self.stdout_file_str,
             "incremental_data": self.incremental_data,
+            "geometries": [i.to_JSON(keep_arrays) for i in self._geometries],
         }
         if not keep_arrays:
             for inc_idx, inc_i in enumerate(data["incremental_data"] or []):
@@ -409,7 +419,7 @@ class CIPHEROutput:
         return data
 
     @classmethod
-    def from_JSON(cls, data):
+    def from_JSON(cls, data, quiet=True):
 
         attrs = {
             "directory": data["directory"],
@@ -427,7 +437,12 @@ class CIPHEROutput:
                     as_arr_val = np.array(attrs["incremental_data"][inc_idx][key])
                     attrs["incremental_data"][inc_idx][key] = as_arr_val
 
-        obj = cls(**attrs)
+        obj = cls(**attrs, quiet=quiet)
+        geoms = [
+            CIPHERGeometry.from_JSON(i, quiet=quiet) for i in data.get("geometries", [])
+        ]
+        obj._geometries = geoms or None
+
         return obj
 
     def to_JSON_file(self, path):
@@ -516,7 +531,7 @@ class CIPHEROutput:
             if row_labels:
                 df_hist_i[row_label_name] = str(row_labels[idx])
 
-            df_hist_all = df_hist_all.append(df_hist_i)
+            df_hist_all = pd.concat([df_hist_all, df_hist_i])
 
             if max_phase_size_i > max_phase_size_all:
                 max_phase_size_all = max_phase_size_i
@@ -793,5 +808,97 @@ class CIPHEROutput:
         )
         fig.update_traces(width=bin_size)
         fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
+
+        return fig
+
+    def get_geometry(self, inc_data_index):
+        start_geom = self.cipher_input.geometry
+        inc_dat = self.incremental_data[inc_data_index]
+        voxel_phase = inc_dat["phaseid"]
+        if start_geom.dimension == 2:
+            voxel_phase = voxel_phase[:, :, 0]
+
+        geom = CIPHERGeometry(
+            materials=start_geom.materials,
+            interfaces=start_geom.interfaces,
+            size=start_geom.size,
+            voxel_phase=voxel_phase,
+            allow_missing_phases=True,
+            quiet=True,
+            time=inc_dat["time"],
+        )
+        return geom
+
+    def get_all_geometries(self, include_initial=True):
+        """A generator function to provide all available `CIPHERGeometry` objects."""
+
+        if include_initial:
+            geom_0 = self.cipher_input.geometry
+            if geom_0.time is None:
+                geom_0.time = 0
+            yield geom_0
+
+        if self._geometries is not None:
+            for i in self._geometries:
+                yield i
+        else:
+            for idx, inc_dat in enumerate(self.incremental_data):
+                if "phaseid" in inc_dat:
+                    yield self.get_geometry(idx)
+
+    def set_all_geometries(self):
+        if self._geometries is not None:
+            raise ValueError("Geometries are already set.")
+        self._geometries = [i for i in self.get_all_geometries(include_initial=True)]
+
+    @property
+    def geometries(self):
+        if self._geometries is not None:
+            return self._geometries
+        else:
+            raise ValueError("Run `set_all_geometries` first.")
+
+    def show_slice_evolution(
+        self,
+        slice_index=0,
+        normal_dir="z",
+        data_label="phase",
+        include=None,
+        **kwargs,
+    ):
+        slices = []
+        times = []
+        for geom in self.geometries:
+            slices.append(
+                geom.get_slice(slice_index, normal_dir, data_label, include)[None]
+            )
+            times.append(geom.time)
+
+        slices = np.concatenate(slices)
+        min_val = np.min(slices)
+        max_val = np.max(slices)
+        fig = px.imshow(
+            img=slices,
+            animation_frame=0,
+            color_continuous_scale="viridis",
+            zmin=min_val,
+            zmax=max_val,
+            **kwargs,
+        )
+
+        ani_steps = list(fig.layout.sliders[0]["steps"])
+        ani_steps_new = []
+        for idx, i in enumerate(ani_steps):
+            i["label"] = f"{round(times[idx]):_}"
+            ani_steps_new.append(i)
+
+        fig.update_layout(
+            sliders=[
+                {
+                    "currentvalue": {"prefix": "Time = ", "suffix": " s"},
+                    "steps": ani_steps_new,
+                }
+            ]
+        )
 
         return fig
