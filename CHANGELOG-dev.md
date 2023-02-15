@@ -1,4 +1,37 @@
 
+<a name="v0.5.0a1"></a>
+## [v0.5.0a1](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a0...v0.5.0a1) - 2023.02.15
+
+### ♻ Code Refactoring
+
+* separate move classes into own modules
+* move CIPHERGeometry to its own module
+
+### ✨ Features
+
+* add CIPHEROutput.show_slice_evolution and supporting code
+* identify grain boundaries in CIPHERGeometry
+* add VoxelMap.get_coordinates
+* CIPHEROutput.get_geometry to load an evolved geometry
+* add CIPHERGeometry.get_slice and .show_slice
+* allow loading CIPHERGeometry where some phases are missing
+* add quiet bool arg to suppress some prints
+* initial add of bin_interfaces_by_misorientation_angle
+
+### 🐛 Bug Fixes
+
+* _geometries assignment
+* add CIPHEROutput.geometries prop
+* CIPHERGeometry to/from JSON with GBs
+* exception message in CIPHERGeometry init
+* generate_VTI_files_from_VTU_files for 2D geometries
+* pandas deprecation warning: append -> concatentate
+
+### 👷 Build changes
+
+* merge from remote
+
+
 <a name="v0.5.0a0"></a>
 ## [v0.5.0a0](https://github.com/LightForm-group/cipher-parse/compare/v0.4.0...v0.5.0a0) - 2023.01.22
 
