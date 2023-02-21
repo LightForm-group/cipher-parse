@@ -864,13 +864,16 @@ class CIPHEROutput:
         normal_dir="z",
         data_label="phase",
         include=None,
+        misorientation_matrix=None,
         **kwargs,
     ):
         slices = []
         times = []
         for geom in self.geometries:
             slices.append(
-                geom.get_slice(slice_index, normal_dir, data_label, include)[None]
+                geom.get_slice(
+                    slice_index, normal_dir, data_label, include, misorientation_matrix
+                )[None]
             )
             times.append(geom.time)
 
