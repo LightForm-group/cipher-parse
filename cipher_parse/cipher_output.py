@@ -407,7 +407,7 @@ class CIPHEROutput:
             "stdout_file_name": self.stdout_file_name,
             "stdout_file_str": self.stdout_file_str,
             "incremental_data": self.incremental_data,
-            "geometries": [i.to_JSON(keep_arrays) for i in self._geometries],
+            "geometries": [i.to_JSON(keep_arrays) for i in self._geometries or []],
         }
         if not keep_arrays:
             for inc_idx, inc_i in enumerate(data["incremental_data"] or []):

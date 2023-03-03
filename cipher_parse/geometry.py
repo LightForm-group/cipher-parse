@@ -459,7 +459,7 @@ class CIPHERGeometry:
 
     def _get_phase_orientation(self):
         """Get the orientation of each phase, if specified in the phase-type."""
-        phase_ori = np.ones((self.num_phases, 4), dtype=float) * np.nan
+        phase_ori = np.ones((self.num_known_phases, 4), dtype=float) * np.nan
         for phase_type in self.phase_types:
             for type_idx, phase_i in enumerate(phase_type.phases):
                 if phase_type.orientations is not None:
@@ -1063,7 +1063,7 @@ class CIPHERGeometry:
     def phase_orientation(self, oris):
         """Set the orientation quaternion of each phase, via material phase types."""
 
-        shape = (self.num_phases, 4)
+        shape = (self.num_known_phases, 4)
         if oris.shape != shape:
             raise ValueError(f"Phase orientations must have shape {shape!r}")
 
