@@ -112,7 +112,7 @@ class CIPHERGeometry:
         self._interface_map = self._get_interface_map(quiet=quiet)
         self._validate_interface_map()  # TODO: add setter to interface map
 
-        self._phase_orientation = self._get_phase_orientation()
+        self.phase_orientation = self._get_phase_orientation()
 
         # assigned by `get_misorientation_matrix`:
         self._misorientation_matrix = None
@@ -459,7 +459,7 @@ class CIPHERGeometry:
 
     def _get_phase_orientation(self):
         """Get the orientation of each phase, if specified in the phase-type."""
-        phase_ori = np.ones((self.num_phases, 4), dtype=float) * np.nan
+        phase_ori = np.ones((self.num_known_phases, 4), dtype=float) * np.nan
         for phase_type in self.phase_types:
             for type_idx, phase_i in enumerate(phase_type.phases):
                 if phase_type.orientations is not None:
@@ -842,7 +842,14 @@ class CIPHERGeometry:
         else:
             return self.voxel_phase_neighbours.T[:, :, None]
 
-    def get_slice(self, slice_index=0, normal_dir="z", data_label="phase", include=None):
+    def get_slice(
+        self,
+        slice_index=0,
+        normal_dir="z",
+        data_label="phase",
+        include=None,
+        misorientation_matrix=None,
+    ):
 
         allowed_data = [
             "phase",
@@ -850,6 +857,7 @@ class CIPHERGeometry:
             "interface_idx",
             "phase_neighbours",
             "grain_boundaries",
+            "GB_misorientation",
         ]
         if data_label not in allowed_data:
             raise ValueError(f"`data_label` must be one of: {allowed_data}.")
@@ -864,6 +872,8 @@ class CIPHERGeometry:
             data = self.voxel_phase_neighbours_3D
         elif data_label == "grain_boundaries":
             data = self.get_grain_boundary_map(as_3D=True)
+        elif data_label == "GB_misorientation":
+            data = self.voxel_map.get_interface_idx(misorientation_matrix, as_3D=True)
 
         data = np.copy(data)
         if normal_dir == "x":
@@ -891,8 +901,25 @@ class CIPHERGeometry:
         phase_centroids=False,
         **kwargs,
     ):
+
+        if "misorientation_matrix" in kwargs:
+            slice_dat = self.get_slice(
+                slice_index,
+                normal_dir,
+                data_label,
+                include,
+                misorientation_matrix=kwargs.pop("misorientation_matrix"),
+            )
+        else:
+            slice_dat = self.get_slice(
+                slice_index,
+                normal_dir,
+                data_label,
+                include,
+            )
+
         fig = px.imshow(
-            self.get_slice(slice_index, normal_dir, data_label, include),
+            slice_dat,
             color_continuous_scale="viridis",
             **kwargs,
         )
@@ -1031,6 +1058,22 @@ class CIPHERGeometry:
     def phase_orientation(self):
         """Get the orientation quaternion of each phase."""
         return self._phase_orientation
+
+    @phase_orientation.setter
+    def phase_orientation(self, oris):
+        """Set the orientation quaternion of each phase, via material phase types."""
+
+        shape = (self.num_known_phases, 4)
+        if oris.shape != shape:
+            raise ValueError(f"Phase orientations must have shape {shape!r}")
+
+        max_idx = 0
+        for phase_type in self.phase_types:
+            ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
+            max_idx = ori_idx[-1]
+            phase_type.orientations = oris[ori_idx]
+
+        self._phase_orientation = self._get_phase_orientation()
 
     @property
     def voxel_material(self):

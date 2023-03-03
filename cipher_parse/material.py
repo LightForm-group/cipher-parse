@@ -51,6 +51,10 @@ class PhaseTypeDefinition:
     def name(self):
         return self.material.name + (f"-{self.type_label}" if self.type_label else "")
 
+    @property
+    def num_phases(self):
+        return self.phases.size
+
     def to_JSON(self, keep_arrays=False):
         data = {
             "type_label": self.type_label,

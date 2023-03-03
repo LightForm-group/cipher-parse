@@ -10,6 +10,8 @@ from plotly import graph_objects
 from plotly.colors import qualitative
 from vecmaths.geometry import get_box_xyz
 
+from cipher_parse.quats import axang2quat
+
 
 def euclidean_distance_matrix(a, b):
     return np.linalg.norm(a[:, None, :] - b[None, :, :], axis=-1)
@@ -534,3 +536,18 @@ def get_time_linear_subset_indices(time_interval, max_time, times):
         endpoint=True,
     )
     return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1)))
+
+
+def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
+    """Generate an orientation gradient where orientations rotate uniformly according to a
+    phase_centroids coordinate."""
+
+    coords = phase_centroids[:, 0]
+    low_x, high_x = np.min(coords), np.max(coords)
+    frac_x = (coords - low_x) / (high_x - low_x)
+    rots_deg = np.linspace(0, max_misorientation_deg, num=coords.size, endpoint=True)
+    rots = np.deg2rad(rots_deg)
+    rots_quats = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
+    oris = np.zeros((coords.size, 4))
+    oris[np.argsort(frac_x)] = rots_quats
+    return oris

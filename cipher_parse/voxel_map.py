@@ -255,7 +255,7 @@ class VoxelMap:
 
         return neighbours
 
-    def get_interface_idx(self, interface_map):
+    def get_interface_idx(self, interface_map, as_3D=False):
 
         interface_idx_above_flat = interface_map[
             self.region_ID_flat, self.region_ID_above.reshape(-1)
@@ -309,6 +309,11 @@ class VoxelMap:
         # avoid self-phase neighbour idx of -1:
         interface_idx_all = np.sort(interface_idx_all, axis=0)[-1]
         interface_idx_all[self.region_ID_bulk] = -1
+
+        if self.dimension == 3:
+            return interface_idx_all
+        elif as_3D:
+            return interface_idx_all.T[:, :, None]
 
         return interface_idx_all
 

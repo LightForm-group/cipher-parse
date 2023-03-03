@@ -407,7 +407,7 @@ class CIPHEROutput:
             "stdout_file_name": self.stdout_file_name,
             "stdout_file_str": self.stdout_file_str,
             "incremental_data": self.incremental_data,
-            "geometries": [i.to_JSON(keep_arrays) for i in self._geometries],
+            "geometries": [i.to_JSON(keep_arrays) for i in self._geometries or []],
         }
         if not keep_arrays:
             for inc_idx, inc_i in enumerate(data["incremental_data"] or []):
@@ -864,13 +864,16 @@ class CIPHEROutput:
         normal_dir="z",
         data_label="phase",
         include=None,
+        misorientation_matrix=None,
         **kwargs,
     ):
         slices = []
         times = []
         for geom in self.geometries:
             slices.append(
-                geom.get_slice(slice_index, normal_dir, data_label, include)[None]
+                geom.get_slice(
+                    slice_index, normal_dir, data_label, include, misorientation_matrix
+                )[None]
             )
             times.append(geom.time)
 
