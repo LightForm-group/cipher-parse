@@ -1,4 +1,16 @@
 
+<a name="v0.5.0a2"></a>
+## [v0.5.0a2](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a1...v0.5.0a2) - 2023.03.03
+
+### ✨ Features
+
+* add ability to sample orientations from a linear orientation gradient
+
+### 🐛 Bug Fixes
+
+* CIPHEROutput.to_JSON and CIPHERGeometry._get_phase_orientation
+
+
 <a name="v0.5.0a1"></a>
 ## [v0.5.0a1](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a0...v0.5.0a1) - 2023.02.15
 
