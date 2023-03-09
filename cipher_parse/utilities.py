@@ -547,7 +547,6 @@ def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
     frac_x = (coords - low_x) / (high_x - low_x)
     rots_deg = np.linspace(0, max_misorientation_deg, num=coords.size, endpoint=True)
     rots = np.deg2rad(rots_deg)
-    rots_quats = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
-    oris = np.zeros((coords.size, 4))
-    oris[np.argsort(frac_x)] = rots_quats
-    return oris
+    ori_range = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
+    ori_idx = np.argsort(frac_x)
+    return ori_range, ori_idx
