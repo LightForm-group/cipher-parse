@@ -163,6 +163,7 @@ class CIPHEROutput:
         stdout_file_str,
         incremental_data,
         quiet=False,
+        cipher_input=None,
     ):
 
         default_options = {
@@ -185,7 +186,7 @@ class CIPHEROutput:
         self.incremental_data = incremental_data
         self.quiet = quiet
 
-        self._cipher_input = None
+        self._cipher_input = cipher_input or None
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
 
@@ -419,7 +420,7 @@ class CIPHEROutput:
         return data
 
     @classmethod
-    def from_JSON(cls, data, quiet=True):
+    def from_JSON(cls, data, cipher_input=None, quiet=True):
 
         attrs = {
             "directory": data["directory"],
@@ -437,7 +438,7 @@ class CIPHEROutput:
                     as_arr_val = np.array(attrs["incremental_data"][inc_idx][key])
                     attrs["incremental_data"][inc_idx][key] = as_arr_val
 
-        obj = cls(**attrs, quiet=quiet)
+        obj = cls(**attrs, cipher_input=cipher_input, quiet=quiet)
         geoms = [
             CIPHERGeometry.from_JSON(i, quiet=quiet) for i in data.get("geometries", [])
         ]
