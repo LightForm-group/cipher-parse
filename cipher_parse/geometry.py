@@ -15,6 +15,7 @@ from cipher_parse.errors import (
     GeometryUnassignedPhasePairInterfaceError,
     GeometryVoxelPhaseError,
 )
+from cipher_parse.utilities import generate_interface_energies_plot
 
 
 class CIPHERGeometry:
@@ -1170,3 +1171,82 @@ class CIPHERGeometry:
             return voxel_GBs.T[:, :, None]
 
         return voxel_GBs
+
+    def get_interface_energies_by_misorientation(self, misorientation_matrix=None):
+        energies_theta = []
+        if misorientation_matrix is None:
+            misorientation_matrix = self.misorientation_matrix
+        for interface_i in self.interfaces:
+            pp_neighbours = []
+            for pp in interface_i.phase_pairs:
+                pp_is_neighbours = np.any(
+                    np.all(pp[:, None] == self.neighbour_list, axis=0)
+                )
+                if pp_is_neighbours:
+                    pp_neighbours.append(pp)
+            pp_neighbours = np.array(pp_neighbours)
+            if pp_neighbours.size:
+                misoris = misorientation_matrix[pp_neighbours[:, 0], pp_neighbours[:, 1]]
+                energies_theta.append(
+                    {
+                        "energy": interface_i.properties["energy"]["e0"],
+                        "mobility": interface_i.properties["mobility"]["m0"],
+                        "misorientation": misoris,
+                        "phase_pairs": pp_neighbours,
+                    }
+                )
+        return energies_theta
+
+    def show_interface_energies_by_misorientation(
+        self,
+        interface_binning,
+        misorientation_matrix=None,
+        colour_by_bin=False,
+        layout_args=None,
+    ):
+        fig = generate_interface_energies_plot(
+            E_min=interface_binning["energy_range"][0],
+            E_max=interface_binning["energy_range"][1],
+            M_min=interface_binning["mobility_range"][0],
+            M_max=interface_binning["mobility_range"][1],
+            theta_max=interface_binning["theta_max"],
+            n=interface_binning["n"],
+            B=interface_binning["B"],
+        )
+        e_y = []
+        m_y = []
+        x = []
+        color = []
+        hover = []
+        for bin_idx, bin_i in enumerate(
+            self.get_interface_energies_by_misorientation(misorientation_matrix)
+        ):
+            for m_i_idx, m_i in enumerate(bin_i["misorientation"]):
+                e_y.append(bin_i["energy"])
+                m_y.append(bin_i["mobility"])
+                x.append(m_i)
+                color.append(bin_idx)
+                hover.append(
+                    f"({bin_i['phase_pairs'][m_i_idx, 0], bin_i['phase_pairs'][m_i_idx, 1]})"
+                )
+
+        fig.add_scatter(
+            x=x,
+            y=e_y,
+            secondary_y=False,
+            mode="markers",
+            marker_color=color if colour_by_bin else "blue",
+            marker_size=5,
+            hovertext=hover,
+        )
+        fig.add_scatter(
+            x=x,
+            y=m_y,
+            secondary_y=True,
+            mode="markers",
+            marker_color=color if colour_by_bin else "red",
+            marker_size=5,
+            hovertext=hover,
+        )
+        fig.update_layout(layout_args or {})
+        return fig

@@ -8,7 +8,10 @@ import numpy as np
 from scipy.spatial import Voronoi, Delaunay
 from plotly import graph_objects
 from plotly.colors import qualitative
+from plotly.subplots import make_subplots
 from vecmaths.geometry import get_box_xyz
+from ipywidgets import interact
+
 
 from cipher_parse.quats import axang2quat
 
@@ -550,6 +553,114 @@ def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
     ori_range = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
     ori_idx = np.argsort(frac_x)
     return ori_range, ori_idx
+
+
+def generate_interface_energies_plot(
+    E_min=0,
+    M_min=0,
+    E_max=1,
+    M_max=1,
+    theta_max=50,
+    n=4,
+    B=5,
+):
+
+    degrees = True
+    theta = np.linspace(0, theta_max)
+
+    E = (
+        read_shockley(
+            theta,
+            E_max=(E_max - E_min),
+            theta_max=theta_max,
+            degrees=degrees,
+        )
+        + E_min
+    )
+    M = (
+        grain_boundary_mobility(
+            theta,
+            M_max=(M_max - M_min),
+            theta_max=theta_max,
+            n=n,
+            B=B,
+            degrees=degrees,
+        )
+        + M_min
+    )
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_scatter(x=theta, y=E, name="energy", secondary_y=False, line_color="blue")
+    fig.add_scatter(x=theta, y=M, name="mobility", secondary_y=True, line_color="red")
+    fig.update_layout(
+        {
+            "width": 600,
+            "xaxis_title": "Misori. /degrees",
+            "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.2},
+        }
+    )
+    fig.update_yaxes(
+        showexponent="all",
+        exponentformat="E",
+        secondary_y=False,
+        color="blue",
+    )
+    fig.update_yaxes(
+        showexponent="all",
+        exponentformat="E",
+        secondary_y=True,
+        color="red",
+    )
+    return fig
+
+
+def generate_energy_widget(E_min=0, M_min=0, E_max=1, M_max=1, theta_max=50, n=4, B=5):
+
+    fig = generate_interface_energies_plot(
+        E_min=E_min,
+        M_min=M_min,
+        E_max=E_max,
+        M_max=M_max,
+        theta_max=theta_max,
+        n=n,
+        B=B,
+    )
+    theta = np.linspace(0, theta_max)
+
+    @interact(
+        n=(1.0, 50.0, 0.01),
+        B=(0, 50.0, 0.01),
+        E_min=(0, 1, 0.01),
+        M_min=(0, 1, 0.01),
+        E_max=(0, 1, 0.01),
+        M_max=(0, 1, 0.01),
+        theta_max=(0, 90, 0.01),
+    )
+    def update(
+        E_min=E_min, M_min=M_min, E_max=E_max, M_max=M_max, theta_max=theta_max, n=n, B=B
+    ):
+        with fig.batch_update():
+            E = (
+                read_shockley(
+                    theta, E_max=(E_max - E_min), theta_max=theta_max, degrees=degrees
+                )
+                + E_min
+            )
+            M = (
+                grain_boundary_mobility(
+                    theta,
+                    M_max=(M_max - M_min),
+                    n=n,
+                    B=B,
+                    theta_max=theta_max,
+                    degrees=degrees,
+                )
+                + M_min
+            )
+            fig.data[0].y = E
+            fig.data[1].y = M
+
+    return fig
 
 
 def get_array_edge_mask(arr):
