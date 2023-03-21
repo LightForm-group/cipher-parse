@@ -842,6 +842,8 @@ class CIPHEROutput:
             allow_missing_phases=True,
             quiet=True,
             time=inc_dat["time"],
+            increment=inc_dat["increment"],
+            incremental_data_idx=inc_data_index,
         )
         return geom
 
@@ -852,6 +854,7 @@ class CIPHEROutput:
             geom_0 = self.cipher_input.geometry
             if geom_0.time is None:
                 geom_0.time = 0
+                geom_0.increment = 0
             yield geom_0
 
         if self._geometries is not None:

@@ -30,6 +30,8 @@ class CIPHERGeometry:
         allow_missing_phases=False,
         quiet=False,
         time=None,
+        increment=None,
+        incremental_data_idx=None,
     ):
         """
         Parameters
@@ -63,6 +65,8 @@ class CIPHERGeometry:
         self.size = np.asarray(size)
         self.allow_missing_phases = allow_missing_phases
         self.time = time
+        self.increment = increment
+        self.incremental_data_idx = incremental_data_idx
 
         for i in self.materials:
             i._geometry = self
@@ -153,6 +157,8 @@ class CIPHERGeometry:
             "allow_missing_phases": self.allow_missing_phases,
             "grain_boundaries": self._grain_boundaries,
             "time": self.time,
+            "increment": self.increment,
+            "incremental_data_idx": self.incremental_data_idx,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
@@ -182,6 +188,8 @@ class CIPHERGeometry:
             "random_seed": data["random_seed"],
             "allow_missing_phases": data.get("allow_missing_phases", False),
             "time": data.get("time"),
+            "increment": data.get("increment"),
+            "incremental_data_idx": data.get("incremental_data_idx"),
         }
         GBs = {}
         for phase_pair in data.get("grain_boundaries") or []:
@@ -612,6 +620,7 @@ class CIPHERGeometry:
         return int_map.astype(int)
 
     def get_interface_idx(self):
+        """Get the interface index associated with each voxel."""
         return self.voxel_map.get_interface_idx(self.interface_map_int)
 
     def get_interface_misorientation(self):
