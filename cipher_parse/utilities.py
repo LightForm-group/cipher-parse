@@ -552,6 +552,16 @@ def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
     return ori_range, ori_idx
 
 
+def get_array_edge_mask(arr):
+    """Get a boolean mask array that is True at the edge elements of an array."""
+    all_idx = np.indices(arr.shape)
+    mask = np.zeros_like(arr)
+    for dim_idx, dim_size in enumerate(arr.shape):
+        dim_mask = np.logical_or(all_idx[dim_idx] == 0, all_idx[dim_idx] == dim_size - 1)
+        mask = np.logical_or(mask, dim_mask)
+    return mask
+
+
 def update_plotly_figure_animation_slider_to_times(fig, times):
 
     ani_steps = list(fig.layout.sliders[0]["steps"])

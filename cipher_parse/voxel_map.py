@@ -1,5 +1,6 @@
 import numpy as np
 import pyvista as pv
+from cipher_parse.utilities import get_array_edge_mask
 
 
 class VoxelMap:
@@ -89,7 +90,19 @@ class VoxelMap:
             Which direction to consider (-1, +1)
 
         """
-        return np.roll(self.region_ID, shift=direction, axis=dimension)
+
+        region = np.roll(self.region_ID, shift=direction, axis=dimension)
+
+        if not self.is_periodic:
+            idx = 0 if direction == 1 else -1
+            if dimension == 0:
+                region[idx] = self.region_ID[idx]
+            elif dimension == 1:
+                region[:, idx] = self.region_ID[:, idx]
+            elif dimension == 2:
+                region[:, :, idx] = self.region_ID[:, :, idx]
+
+        return region
 
     @property
     def region_ID_above(self):
@@ -310,12 +323,13 @@ class VoxelMap:
         interface_idx_all = np.sort(interface_idx_all, axis=0)[-1]
         interface_idx_all[self.region_ID_bulk] = -1
 
-        if self.dimension == 3:
-            return interface_idx_all
-        elif as_3D:
-            return interface_idx_all.T[:, :, None]
+        if not self.is_periodic:
+            interface_idx_all[get_array_edge_mask(interface_idx_all)] = -1
 
-        return interface_idx_all
+        if self.dimension == 2 and as_3D:
+            return interface_idx_all.T[:, :, None]
+        else:
+            return interface_idx_all
 
     @property
     def grid_size_3D(self):
