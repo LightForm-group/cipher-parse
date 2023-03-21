@@ -550,3 +550,21 @@ def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
     ori_range = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
     ori_idx = np.argsort(frac_x)
     return ori_range, ori_idx
+
+
+def update_plotly_figure_animation_slider_to_times(fig, times):
+
+    ani_steps = list(fig.layout.sliders[0]["steps"])
+    ani_steps_new = []
+    for idx, i in enumerate(ani_steps):
+        i["label"] = f"{round(times[idx]):_}"
+        ani_steps_new.append(i)
+
+    fig.update_layout(
+        sliders=[
+            {
+                "currentvalue": {"prefix": "Time = ", "suffix": " s"},
+                "steps": ani_steps_new,
+            }
+        ]
+    )

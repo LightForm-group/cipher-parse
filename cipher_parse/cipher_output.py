@@ -13,7 +13,11 @@ import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
 from cipher_parse.geometry import CIPHERGeometry
-from cipher_parse.utilities import get_subset_indices, get_time_linear_subset_indices
+from cipher_parse.utilities import (
+    get_subset_indices,
+    get_time_linear_subset_indices,
+    update_plotly_figure_animation_slider_to_times,
+)
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
 DEFAULT_PARAVIEW_EXE = "pvbatch"
@@ -517,6 +521,7 @@ class CIPHEROutput:
                 max_prob_i,
                 _,
                 max_phase_size_i,
+                available_inc_idx,
             ) = cls._prepare_phase_size_dist_evolution_dataframe(
                 out_i,
                 use_phaseid=use_phaseid,
@@ -727,7 +732,7 @@ class CIPHEROutput:
 
             df_hist = df_hist.append(df_hist_i)
 
-        return df_hist, max_counts, max_prob, bin_size, max_phase_size
+        return df_hist, max_counts, max_prob, bin_size, max_phase_size, avail_inc_idx
 
     def show_phase_size_dist_evolution(
         self,
@@ -758,6 +763,7 @@ class CIPHEROutput:
             max_prob,
             bin_size,
             max_phase_size,
+            available_inc_idx,
         ) = self._prepare_phase_size_dist_evolution_dataframe(
             self,
             use_phaseid=use_phaseid,
@@ -809,6 +815,15 @@ class CIPHEROutput:
         )
         fig.update_traces(width=bin_size)
         fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
+
+        times = [
+            i["time"]
+            for idx, i in enumerate(self.incremental_data)
+            if idx in available_inc_idx
+        ]
+        update_plotly_figure_animation_slider_to_times(fig, times)
+
+        return fig
 
         return fig
 
