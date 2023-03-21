@@ -26,6 +26,7 @@ class CIPHERGeometry:
         seeds=None,
         voxel_phase=None,
         voxel_map=None,
+        is_periodic=False,
         random_seed=None,
         allow_missing_phases=False,
         quiet=False,
@@ -48,13 +49,15 @@ class CIPHERGeometry:
             voxel_map = VoxelMap(
                 region_ID=voxel_phase,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
                 quiet=quiet,
             )
         else:
             voxel_phase = voxel_map.region_ID
+            is_periodic = voxel_map.is_periodic
 
         self._interfaces = None
+        self._is_periodic = is_periodic
 
         self.voxel_map = voxel_map
         self.voxel_phase = voxel_phase
@@ -151,6 +154,7 @@ class CIPHERGeometry:
             "size": self.size,
             "seeds": self.seeds,
             "voxel_phase": self.voxel_phase,
+            "is_periodic": self.is_periodic,
             "random_seed": self.random_seed,
             "misorientation_matrix": self.misorientation_matrix,
             "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
@@ -185,6 +189,7 @@ class CIPHERGeometry:
             "size": np.array(data["size"]),
             "seeds": np.array(data["seeds"]),
             "voxel_phase": np.array(data["voxel_phase"]),
+            "is_periodic": data.get("is_periodic", False),
             "random_seed": data["random_seed"],
             "allow_missing_phases": data.get("allow_missing_phases", False),
             "time": data.get("time"),
@@ -226,6 +231,10 @@ class CIPHERGeometry:
     @property
     def interfaces(self):
         return self._interfaces
+
+    @property
+    def is_periodic(self):
+        return self._is_periodic
 
     @interfaces.setter
     def interfaces(self, interfaces):
