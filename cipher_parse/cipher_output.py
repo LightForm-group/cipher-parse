@@ -825,6 +825,84 @@ class CIPHEROutput:
 
         return fig
 
+    def show_misorientation_dist_evolution(
+        self,
+        num_bins=None,
+        bin_size=None,
+        layout_args=None,
+    ):
+
+        all_misori_vox = []
+        inc_dat_indices = []
+        incs = []
+        times = []
+        max_misori = 0
+        for geom in self.geometries:
+            misori_voxels = geom.voxel_map.get_interface_idx(
+                self.cipher_input.geometry.misorientation_matrix
+            ).flatten()
+            misori_voxels = misori_voxels[misori_voxels != -1]
+            all_misori_vox.append(misori_voxels)
+            inc_dat_indices.append(geom.incremental_data_idx)
+            incs.append(geom.increment)
+            times.append(geom.time)
+            max_misori_i = misori_voxels.max()
+            if max_misori_i > max_misori:
+                max_misori = max_misori_i
+
+        if num_bins is not None and bin_size is not None:
+            raise TypeError(f"Specify exactly one of `num_bins` and `bin_size`.")
+        elif num_bins is None and bin_size is None:
+            num_bins = 50
+
+        if bin_size is None:
+            bin_size = max_misori / num_bins
+        else:
+            num_bins = int(max_misori / bin_size)
+
+        bin_edges = np.linspace(0, max_misori + (bin_size / 2), num=num_bins + 1)
+        bin_edges -= bin_size / 2  # so we have a bin centred on zero.
+
+        df_hist = pd.DataFrame()
+        max_counts = 0
+        for idx, voxels in enumerate(all_misori_vox):
+            counts, bins = np.histogram(voxels, bins=bin_edges)
+            max_counts_i = np.max(counts)
+            if max_counts_i > max_counts:
+                max_counts = max_counts_i
+            bin_centres = (np.array(bins) + (bin_size / 2))[:-1]
+            df_hist_i = pd.DataFrame(
+                {
+                    "incremental_data_idx": np.repeat(inc_dat_indices[idx], counts.size),
+                    "increment": np.repeat(incs[idx], counts.size),
+                    "time": np.repeat(times[idx], counts.size),
+                    "misorientation": bin_centres,
+                    "count": counts,
+                }
+            )
+            df_hist = df_hist.append(df_hist_i)
+
+        fig = px.bar(df_hist, x="misorientation", y="count", animation_frame="time")
+
+        # turn off frame transitions:
+        fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 0
+
+        fig.layout.update(
+            {
+                "xaxis": {
+                    "range": [
+                        -bin_size / 2,
+                        np.round(max_misori * 1.1, decimals=6),
+                    ],
+                    "title": "Misorientation /degrees",
+                },
+                "yaxis": {"range": [0, max_counts], "title": "Num. voxels"},
+                **(layout_args or {}),
+            }
+        )
+        fig.update_traces(width=bin_size)
+        fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
+
         return fig
 
     def get_geometry(self, inc_data_index):
@@ -884,6 +962,7 @@ class CIPHEROutput:
         data_label="phase",
         include=None,
         misorientation_matrix=None,
+        layout_args=None,
         **kwargs,
     ):
         slices = []
@@ -905,22 +984,9 @@ class CIPHEROutput:
             color_continuous_scale="viridis",
             zmin=min_val,
             zmax=max_val,
+            labels={"color": data_label},
             **kwargs,
         )
-
-        ani_steps = list(fig.layout.sliders[0]["steps"])
-        ani_steps_new = []
-        for idx, i in enumerate(ani_steps):
-            i["label"] = f"{round(times[idx]):_}"
-            ani_steps_new.append(i)
-
-        fig.update_layout(
-            sliders=[
-                {
-                    "currentvalue": {"prefix": "Time = ", "suffix": " s"},
-                    "steps": ani_steps_new,
-                }
-            ]
-        )
-
+        fig.update_layout(layout_args or {})
+        update_plotly_figure_animation_slider_to_times(fig, times)
         return fig
