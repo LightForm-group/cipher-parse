@@ -558,21 +558,23 @@ class CIPHERInput:
     def bin_interfaces_by_misorientation_angle(
         self,
         base_interface_name,
-        energy_range,
-        mobility_range,
         theta_max,
+        energy_range=None,
+        mobility_range=None,
         n=4,
         B=5,
         bin_width=5,
         degrees=True,
     ):
+        if energy_range is None and mobility_range is None:
+            raise ValueError(
+                "Specify at least one of `energy_range` and `mobility_range`."
+            )
         base_defn, phase_pairs = self.geometry.remove_interface(base_interface_name)
         if self.geometry.misorientation_matrix is None:
             misori_matrix = self.geometry.get_misorientation_matrix()
         else:
             misori_matrix = self.geometry.misorientation_matrix
-
-        print(f"{bin_width=}")
 
         min_mis, max_mis = np.min(misori_matrix), np.max(misori_matrix)
         min_range = np.floor(min_mis / bin_width) * bin_width
@@ -588,34 +590,30 @@ class CIPHERInput:
             misori_bins,
             right=False,
         )
-        num_bins = misori_bins.size
-        energy_bins = np.linspace(*energy_range, num=num_bins)
-        mobility_bins = np.linspace(*mobility_range, num=num_bins)
-
         theta = (misori_bins + (bin_width / 2))[:-1]
-        print(f"{misori_bins=}")
-        print(f"{theta=}")
 
-        energy = (
-            read_shockley(
-                theta=theta,
-                E_max=(energy_range[1] - energy_range[0]),
-                theta_max=theta_max,
-                degrees=degrees,
+        if energy_range is not None:
+            energy = (
+                read_shockley(
+                    theta=theta,
+                    E_max=(energy_range[1] - energy_range[0]),
+                    theta_max=theta_max,
+                    degrees=degrees,
+                )
+                + energy_range[0]
             )
-            + energy_range[0]
-        )
-        mobility = (
-            grain_boundary_mobility(
-                theta=theta,
-                M_max=(mobility_range[1] - mobility_range[0]),
-                theta_max=theta_max,
-                degrees=degrees,
-                n=n,
-                B=B,
+        if mobility_range is not None:
+            mobility = (
+                grain_boundary_mobility(
+                    theta=theta,
+                    M_max=(mobility_range[1] - mobility_range[0]),
+                    theta_max=theta_max,
+                    degrees=degrees,
+                    n=n,
+                    B=B,
+                )
+                + mobility_range[0]
             )
-            + mobility_range[0]
-        )
 
         phase_pairs_bin_idx = bin_idx[phase_pairs[0], phase_pairs[1]]
 
@@ -642,11 +640,13 @@ class CIPHERInput:
 
                 props = copy.deepcopy(base_defn.properties)
 
-                new_e0 = energy[bin_idx_i - 1].item()
-                set_by_path(root=props, path=("energy", "e0"), value=new_e0)
+                if energy_range is not None:
+                    new_e0 = energy[bin_idx_i - 1].item()
+                    set_by_path(root=props, path=("energy", "e0"), value=new_e0)
 
-                new_m0 = mobility[bin_idx_i - 1].item()
-                set_by_path(root=props, path=("mobility", "m0"), value=new_m0)
+                if mobility_range is not None:
+                    new_m0 = mobility[bin_idx_i - 1].item()
+                    set_by_path(root=props, path=("mobility", "m0"), value=new_m0)
 
                 print(
                     f"  Adding {phase_pairs_bin_i_idx.size!r} phase pair(s) "
