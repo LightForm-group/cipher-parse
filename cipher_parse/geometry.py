@@ -1089,7 +1089,7 @@ class CIPHERGeometry:
         max_idx = 0
         for phase_type in self.phase_types:
             ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
-            max_idx = ori_idx[-1]
+            max_idx = ori_idx[-1] + 1
             phase_type.orientations = oris[ori_idx]
 
         self._phase_orientation = self._get_phase_orientation()
