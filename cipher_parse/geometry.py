@@ -207,10 +207,8 @@ class CIPHERGeometry:
                 "centroid": np.array(GB["centroid"]),
             }
         obj = cls(**data_init, quiet=quiet)
-        obj._misorientation_matrix = np.array(data["misorientation_matrix"])
-        obj._misorientation_matrix_is_degrees = np.array(
-            data["misorientation_matrix_is_degrees"]
-        )
+        if data["misorientation_matrix"] is not None:
+            obj._misorientation_matrix = np.array(data["misorientation_matrix"])
         obj._grain_boundaries = GBs or None
         return obj
 
