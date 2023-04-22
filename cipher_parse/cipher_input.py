@@ -570,7 +570,7 @@ class CIPHERInput:
             raise ValueError(
                 "Specify at least one of `energy_range` and `mobility_range`."
             )
-        base_defn, phase_pairs = self.geometry.remove_interface(base_interface_name)
+
         if self.geometry.misorientation_matrix is None:
             misori_matrix = self.geometry.get_misorientation_matrix()
         else:
@@ -591,6 +591,9 @@ class CIPHERInput:
             right=False,
         )
         theta = (misori_bins + (bin_width / 2))[:-1]
+
+        if not isinstance(base_interface_name, list):
+            base_interface_name = [base_interface_name]
 
         if energy_range is not None:
             energy = (
@@ -615,62 +618,66 @@ class CIPHERInput:
                 + mobility_range[0]
             )
 
-        phase_pairs_bin_idx = bin_idx[phase_pairs[0], phase_pairs[1]]
+        for int_name in base_interface_name:
 
-        max_phase_pairs_fmt_len = 10
+            base_defn, phase_pairs = self.geometry.remove_interface(int_name)
 
-        num_existing_int_defns = len(self.geometry.interfaces)
-        print("Preparing new interface defintions...")
-        new_int_idx = 0
-        for bin_idx_i, bin_i in enumerate(misori_bins, start=1):
+            phase_pairs_bin_idx = bin_idx[phase_pairs[0], phase_pairs[1]]
 
-            phase_pairs_bin_i_idx = np.where(phase_pairs_bin_idx == bin_idx_i)[0]
-            if not phase_pairs_bin_i_idx.size:
-                continue
+            max_phase_pairs_fmt_len = 10
 
-            else:
-                phase_pairs_bin_i = phase_pairs[:, phase_pairs_bin_i_idx].T
-                phase_pairs_bin_i_fmt = ",".join(
-                    f"{i[0]}-{i[1]}" for i in phase_pairs_bin_i
-                )
-                if len(phase_pairs_bin_i_fmt) > max_phase_pairs_fmt_len:
-                    phase_pairs_bin_i_fmt = (
-                        phase_pairs_bin_i_fmt[: max_phase_pairs_fmt_len - 3] + "..."
+            num_existing_int_defns = len(self.geometry.interfaces)
+            print("Preparing new interface defintions...")
+            new_int_idx = 0
+            for bin_idx_i, bin_i in enumerate(misori_bins, start=1):
+
+                phase_pairs_bin_i_idx = np.where(phase_pairs_bin_idx == bin_idx_i)[0]
+                if not phase_pairs_bin_i_idx.size:
+                    continue
+
+                else:
+                    phase_pairs_bin_i = phase_pairs[:, phase_pairs_bin_i_idx].T
+                    phase_pairs_bin_i_fmt = ",".join(
+                        f"{i[0]}-{i[1]}" for i in phase_pairs_bin_i
+                    )
+                    if len(phase_pairs_bin_i_fmt) > max_phase_pairs_fmt_len:
+                        phase_pairs_bin_i_fmt = (
+                            phase_pairs_bin_i_fmt[: max_phase_pairs_fmt_len - 3] + "..."
+                        )
+
+                    props = copy.deepcopy(base_defn.properties)
+
+                    if energy_range is not None:
+                        new_e0 = energy[bin_idx_i - 1].item()
+                        set_by_path(root=props, path=("energy", "e0"), value=new_e0)
+
+                    if mobility_range is not None:
+                        new_m0 = mobility[bin_idx_i - 1].item()
+                        set_by_path(root=props, path=("mobility", "m0"), value=new_m0)
+
+                    print(
+                        f"  Adding {phase_pairs_bin_i_idx.size!r} phase pair(s) "
+                        f"({phase_pairs_bin_i_fmt}) to bin {bin_idx_i} with mid value: "
+                        f"{theta[bin_idx_i - 1]!r}."
                     )
 
-                props = copy.deepcopy(base_defn.properties)
+                    new_type_lab = str(new_int_idx)
+                    if base_defn.type_label:
+                        new_type_lab = f"{base_defn.type_label}-{new_type_lab}"
 
-                if energy_range is not None:
-                    new_e0 = energy[bin_idx_i - 1].item()
-                    set_by_path(root=props, path=("energy", "e0"), value=new_e0)
-
-                if mobility_range is not None:
-                    new_m0 = mobility[bin_idx_i - 1].item()
-                    set_by_path(root=props, path=("mobility", "m0"), value=new_m0)
-
-                print(
-                    f"  Adding {phase_pairs_bin_i_idx.size!r} phase pair(s) "
-                    f"({phase_pairs_bin_i_fmt}) to bin {bin_idx_i} with mid value: "
-                    f"{theta[bin_idx_i - 1]!r}."
-                )
-
-                new_type_lab = str(new_int_idx)
-                if base_defn.type_label:
-                    new_type_lab = f"{base_defn.type_label}-{new_type_lab}"
-
-                new_int = InterfaceDefinition(
-                    phase_types=base_defn.phase_types,
-                    type_label=new_type_lab,
-                    properties=props,
-                    phase_pairs=phase_pairs_bin_i.tolist(),
-                )
-                self.geometry.interfaces.append(new_int)
-                self.geometry._modify_interface_map(
-                    phase_A=phase_pairs_bin_i[:, 0],
-                    phase_B=phase_pairs_bin_i[:, 1],
-                    interface_idx=(num_existing_int_defns + new_int_idx),
-                )
-                new_int_idx += 1
+                    new_int = InterfaceDefinition(
+                        phase_types=base_defn.phase_types,
+                        type_label=new_type_lab,
+                        properties=props,
+                        phase_pairs=phase_pairs_bin_i.tolist(),
+                    )
+                    self.geometry.interfaces.append(new_int)
+                    self.geometry._modify_interface_map(
+                        phase_A=phase_pairs_bin_i[:, 0],
+                        phase_B=phase_pairs_bin_i[:, 1],
+                        interface_idx=(num_existing_int_defns + new_int_idx),
+                    )
+                    new_int_idx += 1
 
         print("done!")
         self.geometry._check_interface_phase_pairs()
