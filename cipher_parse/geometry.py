@@ -1248,3 +1248,19 @@ class CIPHERGeometry:
         )
         fig.update_layout(layout_args or {})
         return fig
+
+    def show_relative_misorientation(self, layout_args=None):
+        phase_centroids = self.get_phase_voxel_centroids()
+        idx = np.argmin(phase_centroids[:, 0])
+        fig = px.imshow(
+            np.rad2deg(
+                quat_angle_between(
+                    np.tile(
+                        self.phase_orientation[idx], (self.phase_orientation.shape[0], 1)
+                    ),
+                    self.phase_orientation,
+                )
+            )[self.voxel_phase].T
+        )
+        fig.layout.update(layout_args or {})
+        return fig
