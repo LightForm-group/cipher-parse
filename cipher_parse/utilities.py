@@ -568,53 +568,71 @@ def generate_interface_energies_plot(
     degrees = True
     theta = np.linspace(0, theta_max)
 
-    E = (
-        read_shockley(
-            theta,
-            E_max=(E_max - E_min),
-            theta_max=theta_max,
-            degrees=degrees,
+    plot_energy = E_min is not None and E_max is not None
+    if plot_energy:
+        E = (
+            read_shockley(
+                theta,
+                E_max=(E_max - E_min),
+                theta_max=theta_max,
+                degrees=degrees,
+            )
+            + E_min
         )
-        + E_min
-    )
-    M = (
-        grain_boundary_mobility(
-            theta,
-            M_max=(M_max - M_min),
-            theta_max=theta_max,
-            n=n,
-            B=B,
-            degrees=degrees,
+    plot_mobility = M_min is not None and M_max is not None
+    if plot_mobility:
+        M = (
+            grain_boundary_mobility(
+                theta,
+                M_max=(M_max - M_min),
+                theta_max=theta_max,
+                n=n,
+                B=B,
+                degrees=degrees,
+            )
+            + M_min
         )
-        + M_min
-    )
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_scatter(x=theta, y=E, name="energy", secondary_y=False, line_color="blue")
-    fig.add_scatter(x=theta, y=M, name="mobility", secondary_y=True, line_color="red")
+    if plot_energy:
+        fig.add_scatter(
+            x=theta, y=E, name="Read-Shockley", secondary_y=False, line_color="blue"
+        )
+    if plot_mobility:
+        fig.add_scatter(x=theta, y=M, name="mobility", secondary_y=True, line_color="red")
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_yaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_layout(
+        legend_y=0.1,
+        legend_x=0.9,
+        legend_xanchor="right",
+        legend_orientation="v",
+    )
     fig.update_layout(
         {
             "width": 600,
             "xaxis_title": "Misori. /degrees",
-            "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.2},
         }
     )
     fig.update_yaxes(
-        showexponent="all",
-        exponentformat="E",
+        tickformat=".1e",
         secondary_y=False,
-        color="blue",
+        title="GB energy",
+        color="blue" if plot_mobility else None,
     )
-    fig.update_yaxes(
-        showexponent="all",
-        exponentformat="E",
-        secondary_y=True,
-        color="red",
-    )
+    if plot_mobility:
+        fig.update_yaxes(
+            tickformat=".1e",
+            secondary_y=True,
+            color="red",
+        )
     return fig
 
 
-def generate_energy_widget(E_min=0, M_min=0, E_max=1, M_max=1, theta_max=50, n=4, B=5):
+def generate_energy_widget(
+    E_min=0, M_min=0, E_max=1, M_max=1, theta_max=50, n=4, B=5, degrees=True
+):
 
     fig = generate_interface_energies_plot(
         E_min=E_min,
