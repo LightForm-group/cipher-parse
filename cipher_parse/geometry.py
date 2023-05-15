@@ -931,6 +931,8 @@ class CIPHERGeometry:
         data_label="phase",
         include=None,
         phase_centroids=False,
+        discrete_colours=None,
+        layout_args=None,
         **kwargs,
     ):
 
@@ -950,6 +952,12 @@ class CIPHERGeometry:
                 include,
             )
 
+        if discrete_colours:
+            slice_RGB = np.tile(slice_dat[..., None], (1, 1, 3)).astype(float)
+            for k, v in discrete_colours.items():
+                slice_RGB[np.where(np.all(slice_RGB == k, axis=2))] = v
+            slice_dat = slice_RGB
+
         fig = px.imshow(
             slice_dat,
             color_continuous_scale="viridis",
@@ -964,6 +972,7 @@ class CIPHERGeometry:
                 text=np.arange(cents.shape[0]),
                 mode="markers",
             )
+        fig.update_layout(layout_args or {})
         return fig
 
     def show(self):
