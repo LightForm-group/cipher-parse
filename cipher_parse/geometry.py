@@ -1201,15 +1201,29 @@ class CIPHERGeometry:
         misorientation_matrix=None,
         colour_by_bin=False,
         layout_args=None,
+        show_mobility=True,
     ):
+        energy_range = interface_binning.get("energy_range")
+        mobility_range = interface_binning.get("mobility_range")
+
+        if mobility_range is None:
+            M_min, M_max = None, None
+        else:
+            M_min, M_max = mobility_range
+
+        if energy_range is None:
+            E_min, E_max = None, None
+        else:
+            E_min, E_max = energy_range
+
         fig = generate_interface_energies_plot(
-            E_min=interface_binning["energy_range"][0],
-            E_max=interface_binning["energy_range"][1],
-            M_min=interface_binning["mobility_range"][0],
-            M_max=interface_binning["mobility_range"][1],
+            E_min=E_min,
+            E_max=E_max,
+            M_min=M_min,
+            M_max=M_max,
             theta_max=interface_binning["theta_max"],
-            n=interface_binning["n"],
-            B=interface_binning["B"],
+            n=interface_binning.get("n"),
+            B=interface_binning.get("B"),
         )
         e_y = []
         m_y = []
@@ -1236,16 +1250,19 @@ class CIPHERGeometry:
             marker_color=color if colour_by_bin else "blue",
             marker_size=5,
             hovertext=hover,
+            name="Model GB energies",
         )
-        fig.add_scatter(
-            x=x,
-            y=m_y,
-            secondary_y=True,
-            mode="markers",
-            marker_color=color if colour_by_bin else "red",
-            marker_size=5,
-            hovertext=hover,
-        )
+        if show_mobility:
+            fig.add_scatter(
+                x=x,
+                y=m_y,
+                secondary_y=True,
+                mode="markers",
+                marker_color=color if colour_by_bin else "red",
+                marker_size=5,
+                hovertext=hover,
+            )
+        fig.layout.title = f"Interface properties at increment {self.increment}"
         fig.update_layout(layout_args or {})
         return fig
 
