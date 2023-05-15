@@ -16,6 +16,7 @@ from cipher_parse.errors import (
     GeometryVoxelPhaseError,
 )
 from cipher_parse.utilities import generate_interface_energies_plot
+from cipher_parse.quats import quat_angle_between
 
 
 class CIPHERGeometry:
@@ -888,6 +889,7 @@ class CIPHERGeometry:
             "phase_neighbours",
             "grain_boundaries",
             "GB_misorientation",
+            "IPF_z",
         ]
         if data_label not in allowed_data:
             raise ValueError(f"`data_label` must be one of: {allowed_data}.")
@@ -906,6 +908,8 @@ class CIPHERGeometry:
             data = self.get_grain_boundary_map(as_3D=True)
         elif data_label == "GB_misorientation":
             data = self.voxel_map.get_interface_idx(misorientation_matrix, as_3D=True)
+        elif data_label == "IPF_z":
+            data = self.get_voxel_IPF(IPF_dir=None, as_3D=True)
 
         data = np.copy(data)
         if normal_dir == "x":
@@ -1160,6 +1164,20 @@ class CIPHERGeometry:
     @property
     def seeds_grid(self):
         return np.round(self.grid_size * self.seeds / self.size, decimals=0).astype(int)
+
+    def get_voxel_IPF(self, IPF_dir=None, as_3D=False):
+        if IPF_dir is None:
+            IPF_dir = np.array([0, 0, 1])
+        vox_oris = self.voxel_orientation
+        dms_oris = Orientation(vox_oris.reshape((-1, 4)), family="cubic")
+        IPF = dms_oris.IPF_color(IPF_dir)
+        shape = list(vox_oris.shape[:-1]) + [3]
+        vox_IPF = IPF.reshape(shape)
+
+        if self.dimension == 2 and as_3D:
+            return np.transpose(vox_IPF, axes=(1, 0, 2))[:, :, None, :]
+        else:
+            return vox_IPF
 
     def remove_interface(self, interface_name):
         """Remove an interface from the geometry. This will invalidate the geometry if
