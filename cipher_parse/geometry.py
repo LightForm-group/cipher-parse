@@ -990,9 +990,10 @@ class CIPHERGeometry:
         grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
         grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
 
-        pl = pv.PlotterITK()
+        # TODO: fix plotter to show multiple cell data
+        pl = pv.Plotter(notebook=True)
         pl.add_mesh(grid)
-        pl.show(ui_collapsed=False)
+        pl.show()
 
     def write_VTK(self, path):
 
@@ -1139,14 +1140,14 @@ class CIPHERGeometry:
     def material_num_voxels(self):
         mat_num_vox = []
         for i in self.materials:
-            num_vox_i = sum(self.phase_num_voxels[j] for j in i.phases)
+            num_vox_i = sum(self.get_phase_num_voxels()[j] for j in i.phases)
             mat_num_vox.append(num_vox_i)
         return np.array(mat_num_vox)
 
     @property
     def phase_type_num_voxels(self):
         return np.array(
-            [np.sum(self.phase_num_voxels[i.phases]) for i in self.phase_types]
+            [np.sum(self.get_phase_num_voxels()[i.phases]) for i in self.phase_types]
         )
 
     @property

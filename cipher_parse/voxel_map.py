@@ -275,7 +275,6 @@ class VoxelMap:
         return neighbours
 
     def get_interface_idx(self, interface_map, as_3D=False):
-
         interface_idx_above_flat = interface_map[
             self.region_ID_flat, self.region_ID_above.reshape(-1)
         ]
@@ -373,6 +372,7 @@ class VoxelMap:
 
         grid.cell_data["data"] = self.region_ID.flatten(order="F")
 
-        pl = pv.PlotterITK()
+        # TODO: fix plotter to show multiple cell data
+        pl = pv.Plotter(notebook=True)
         pl.add_mesh(grid)
-        pl.show(ui_collapsed=False)
+        pl.show()
