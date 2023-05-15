@@ -1,4 +1,45 @@
 
+<a name="v0.5.0a3"></a>
+## [v0.5.0a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a2...v0.5.0a3) - 2023.05.15
+
+### ♻ Code Refactoring
+
+* show_interface_energies_by_misorientation to plot mobility and/or energy
+* return ori range and idx from sample_from_orientations_gradient
+
+### ✨ Features
+
+* add IPF_z data label type to CIPHERGeometry.get_slice
+* add discrete_colours arg to CIPHERGeometry.show_slice
+* add interface data label type to CIPHERGeometry.get_slice
+* add CIPHERGeometry.show_relative_misorientation
+* plot energy and/or mobility in generate_interface_energies_plot
+* add VoxelMap.get_interface_voxels
+* add CIPHEROutput.get_average_radius_evolution
+* add discrete_colours arg to CIPHEROutput.show_slice_evolution
+* support multiple interface_binning base interfaces
+* allow energy or/and mobility ranges in bin_interfaces_by_misorientation_angle
+* add CIPHERGeometry get/show_interface_energies_by_misorientation
+* add CIPHERGeometry get/show_interface_energies_by_misorientation
+* add increment and incremental_data_idx to CIPHERGeometry
+* show sim time on show_phase_size_dist_evolution x-axis
+* allow passing CIPHERInput to CIPHEROutput init
+
+### 🐛 Bug Fixes
+
+* demo_cipher_inputs notebook
+* CIPHERGeometry.from_JSON.from_JSON array casting
+* index problem in CIPHERGeometry.phase_orientation setter
+* CIPHERGeometry track is_periodic
+* VoxelMap.get_interface_idx and VoxelMap.get_neighbour_region when not periodic
+
+### 👷 Build changes
+
+* update deps
+* fix deps problems
+* update poetry lock
+
+
 <a name="v0.5.0a2"></a>
 ## [v0.5.0a2](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a1...v0.5.0a2) - 2023.03.03
 
