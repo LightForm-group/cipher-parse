@@ -219,6 +219,12 @@ class VoxelMap:
             print("done!")
         return interface_voxels
 
+    def get_interface_voxels(self):
+        interface_voxels = np.copy(self.region_ID)
+        interface_voxels[self.region_ID_bulk] = -1
+        interface_voxels[interface_voxels != -1] = 0
+        return interface_voxels
+
     def get_neighbour_list(self, quiet=False):
         """Get the pairs of regions that are neighbours"""
         if not quiet:
