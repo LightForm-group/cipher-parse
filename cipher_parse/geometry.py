@@ -853,6 +853,18 @@ class CIPHERGeometry:
             return int_idx.T[:, :, None]
 
     @property
+    def voxel_interface(self):
+        return self.voxel_map.get_interface_voxels()
+
+    @property
+    def voxel_interface_3D(self):
+        int_vox = self.voxel_interface
+        if self.dimension == 3:
+            return int_vox
+        else:
+            return int_vox.T[:, :, None]
+
+    @property
     def voxel_phase_neighbours_3D(self):
         if self.dimension == 3:
             return self.voxel_phase_neighbours
@@ -871,6 +883,7 @@ class CIPHERGeometry:
         allowed_data = [
             "phase",
             "material",
+            "interface",
             "interface_idx",
             "phase_neighbours",
             "grain_boundaries",
@@ -883,6 +896,8 @@ class CIPHERGeometry:
             data = self.voxel_phase_3D
         elif data_label == "material":
             data = self.voxel_material_3D
+        elif data_label == "interface":
+            data = self.voxel_interface_3D
         elif data_label == "interface_idx":
             data = self.voxel_interface_idx_3D
         elif data_label == "phase_neighbours":
