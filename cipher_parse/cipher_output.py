@@ -963,11 +963,20 @@ class CIPHEROutput:
         include=None,
         misorientation_matrix=None,
         layout_args=None,
+        discrete_colours=None,
+        step_size=None,
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+        discrete_colours : dict, optional
+            If specified, a dict that maps slice data values to RGB three-tuples.
+        """
         slices = []
         times = []
-        for geom in self.geometries:
+        step_size = step_size or 1
+        for geom in self.geometries[::step_size]:
             slices.append(
                 geom.get_slice(
                     slice_index, normal_dir, data_label, include, misorientation_matrix
@@ -976,17 +985,29 @@ class CIPHEROutput:
             times.append(geom.time)
 
         slices = np.concatenate(slices)
-        min_val = np.min(slices)
-        max_val = np.max(slices)
-        fig = px.imshow(
-            img=slices,
-            animation_frame=0,
-            color_continuous_scale="viridis",
-            zmin=min_val,
-            zmax=max_val,
-            labels={"color": data_label},
-            **kwargs,
-        )
+        if discrete_colours:
+            slice_RGB = np.tile(slices[..., None], (1, 1, 1, 3)).astype(float)
+            for k, v in discrete_colours.items():
+                slice_RGB[np.where(np.all(slice_RGB == k, axis=3))] = v
+            slices = slice_RGB
+            fig = px.imshow(
+                img=slices,
+                animation_frame=0,
+                **kwargs,
+            )
+        else:
+            min_val = np.min(slices)
+            max_val = np.max(slices)
+            fig = px.imshow(
+                img=slices,
+                animation_frame=0,
+                color_continuous_scale="viridis",
+                zmin=min_val,
+                zmax=max_val,
+                labels={"color": data_label},
+                **kwargs,
+            )
+
         fig.update_layout(layout_args or {})
         update_plotly_figure_animation_slider_to_times(fig, times)
         return fig
