@@ -1,5 +1,6 @@
 import json
 from importlib import resources
+import math
 from pathlib import Path
 from functools import reduce
 
@@ -7,7 +8,12 @@ import numpy as np
 from scipy.spatial import Voronoi, Delaunay
 from plotly import graph_objects
 from plotly.colors import qualitative
+from plotly.subplots import make_subplots
 from vecmaths.geometry import get_box_xyz
+from ipywidgets import interact
+
+
+from cipher_parse.quats import axang2quat
 
 
 def euclidean_distance_matrix(a, b):
@@ -410,7 +416,7 @@ def set_by_path(root, path, value):
 
 
 def read_shockley(theta, E_max, theta_max, degrees=True):
-    """Misorientation-grain-boundary-energy relationship for low angle GBs."""
+    """Misorientation-grain-boundary-energy relationship for low-angle GBs."""
 
     if degrees:
         theta = np.deg2rad(theta)
@@ -427,6 +433,18 @@ def read_shockley(theta, E_max, theta_max, degrees=True):
     return E
 
 
+def grain_boundary_mobility(theta, M_max, theta_max, n=4, B=5, degrees=True):
+    """Misorientation-grain-boundary-mobility relationship for low-angle GBs."""
+
+    if degrees:
+        theta = np.deg2rad(theta)
+        theta_max = np.deg2rad(theta_max)
+
+    M = M_max * (1 - np.exp(-B * (theta / theta_max) ** n))
+
+    return M
+
+
 def get_example_data_path_dream3D_2D():
     with resources.path(
         "cipher_parse.example_data.dream3d.2D", "synthetic_d3d.dream3d"
@@ -441,41 +459,251 @@ def get_example_data_path_dream3D_3D():
         return p
 
 
-def factors(n, non_prime_only=False):
-    facs = set(
-        reduce(
-            list.__add__,
-            ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)
-        )
-    )
-    if non_prime_only:
-        facs = facs - {1, n}
-        
-    return facs
+def get_subset_indices(size, subset_size):
+    """Get a list of N indices that index as uniformly as possible a sequence of a given
+    size, with the constraint that the indices must include the initial and final elements.
 
-def get_evenly_spaced_subset(lst, max_num):
-    """Get evenly spaced indices that include the initial and final elements
-    in a list. If the list is of length N and N - 1 is prime, then the final
-    spacing will be one larger than the other spacings."""
-    if max_num == 1:
+    Parameters
+    -----------
+    size : int
+    subset_size : int
+
+    Returns
+    -------
+    list of int
+
+    """
+    if subset_size == 0:
+        idx = []
+    elif subset_size == 1 or (subset_size == 2 and size == 1):
         idx = [0]
-    elif max_num == 2:
-        idx = [0, len(lst) - 1]
-    elif max_num >= len(lst):
-        idx = list(range(0, len(lst)))
+    elif subset_size == 2:
+        idx = [0, size - 1]
+    elif subset_size >= size:
+        idx = list(range(0, size))
     else:
-        step_sizes = factors(len(lst) - 1, non_prime_only=True)
-        is_prime = False
-        if not step_sizes:
-            is_prime = True
-            step_sizes = factors(len(lst) - 2, non_prime_only=True)
-        step_sizes_num_steps = [
-            (i, ((len(lst) - (1 if not is_prime else 2)) / i) + 1)
-            for i in step_sizes
-        ]
-        valid = [i for i in step_sizes_num_steps if i[1] <= max_num]        
-        valid_max = max(valid, key=lambda x: x[1])
-        idx = list(range(0, len(lst), valid_max[0]))
-        if is_prime:
-            idx[-1] = len(lst) - 1
+        size_s = size - 1
+        subset_size_s = subset_size - 1
+        ratio = size_s / subset_size_s
+        larger_group_size = math.ceil(ratio)
+        smaller_group_size = math.floor(ratio)
+        num_larger_groups = int(round(subset_size_s * (ratio % 1), ndigits=0))
+        num_smaller_groups = subset_size_s - num_larger_groups
+
+        if num_larger_groups >= num_smaller_groups:
+            more_freq_group = (num_larger_groups, larger_group_size)
+            less_freq_group = (num_smaller_groups, smaller_group_size)
+        else:
+            more_freq_group = (num_smaller_groups, smaller_group_size)
+            less_freq_group = (num_larger_groups, larger_group_size)
+
+        group_sizes = []
+        num_A = more_freq_group[0]
+        num_B = less_freq_group[0]
+
+        if less_freq_group[0] > 0:
+
+            num_ratio = int(more_freq_group[0] / less_freq_group[0])
+            for i in range(subset_size_s):
+                if num_A == num_B == 0:
+                    break
+
+                sub_i = []
+                if num_A >= num_ratio:
+                    sub_i = [more_freq_group[1]] * num_ratio
+                    num_A -= num_ratio
+                elif num_A < num_ratio:
+                    sub_i = [more_freq_group[1]] * num_A
+                    num_A = 0
+
+                if num_B >= 1:
+                    sub_i += [less_freq_group[1]] * 1
+                    num_B -= 1
+                group_sizes.extend(sub_i)
+        else:
+            group_sizes = [smaller_group_size] * num_smaller_groups
+
+        idx = [0]
+        for i in group_sizes[:-1]:
+            idx.append(i + idx[-1])
+        idx += [size_s]
+
     return idx
+
+
+def get_time_linear_subset_indices(time_interval, max_time, times):
+    intervals = np.linspace(
+        0,
+        max_time,
+        num=int(((max_time + time_interval) / time_interval)),
+        endpoint=True,
+    )
+    return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1)))
+
+
+def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
+    """Generate an orientation gradient where orientations rotate uniformly according to a
+    phase_centroids coordinate."""
+
+    coords = phase_centroids[:, 0]
+    low_x, high_x = np.min(coords), np.max(coords)
+    frac_x = (coords - low_x) / (high_x - low_x)
+    rots_deg = np.linspace(0, max_misorientation_deg, num=coords.size, endpoint=True)
+    rots = np.deg2rad(rots_deg)
+    ori_range = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
+    ori_idx = np.argsort(frac_x)
+    return ori_range, ori_idx
+
+
+def generate_interface_energies_plot(
+    E_min=0,
+    M_min=0,
+    E_max=1,
+    M_max=1,
+    theta_max=50,
+    n=4,
+    B=5,
+):
+
+    degrees = True
+    theta = np.linspace(0, theta_max)
+
+    plot_energy = E_min is not None and E_max is not None
+    if plot_energy:
+        E = (
+            read_shockley(
+                theta,
+                E_max=(E_max - E_min),
+                theta_max=theta_max,
+                degrees=degrees,
+            )
+            + E_min
+        )
+    plot_mobility = M_min is not None and M_max is not None
+    if plot_mobility:
+        M = (
+            grain_boundary_mobility(
+                theta,
+                M_max=(M_max - M_min),
+                theta_max=theta_max,
+                n=n,
+                B=B,
+                degrees=degrees,
+            )
+            + M_min
+        )
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    if plot_energy:
+        fig.add_scatter(
+            x=theta, y=E, name="Read-Shockley", secondary_y=False, line_color="blue"
+        )
+    if plot_mobility:
+        fig.add_scatter(x=theta, y=M, name="mobility", secondary_y=True, line_color="red")
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_yaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_layout(
+        legend_y=0.1,
+        legend_x=0.9,
+        legend_xanchor="right",
+        legend_orientation="v",
+    )
+    fig.update_layout(
+        {
+            "width": 600,
+            "xaxis_title": "Misori. /degrees",
+        }
+    )
+    fig.update_yaxes(
+        tickformat=".1e",
+        secondary_y=False,
+        title="GB energy",
+        color="blue" if plot_mobility else None,
+    )
+    if plot_mobility:
+        fig.update_yaxes(
+            tickformat=".1e",
+            secondary_y=True,
+            color="red",
+        )
+    return fig
+
+
+def generate_energy_widget(
+    E_min=0, M_min=0, E_max=1, M_max=1, theta_max=50, n=4, B=5, degrees=True
+):
+
+    fig = generate_interface_energies_plot(
+        E_min=E_min,
+        M_min=M_min,
+        E_max=E_max,
+        M_max=M_max,
+        theta_max=theta_max,
+        n=n,
+        B=B,
+    )
+    theta = np.linspace(0, theta_max)
+
+    @interact(
+        n=(1.0, 50.0, 0.01),
+        B=(0, 50.0, 0.01),
+        E_min=(0, 1, 0.01),
+        M_min=(0, 1, 0.01),
+        E_max=(0, 1, 0.01),
+        M_max=(0, 1, 0.01),
+        theta_max=(0, 90, 0.01),
+    )
+    def update(
+        E_min=E_min, M_min=M_min, E_max=E_max, M_max=M_max, theta_max=theta_max, n=n, B=B
+    ):
+        with fig.batch_update():
+            E = (
+                read_shockley(
+                    theta, E_max=(E_max - E_min), theta_max=theta_max, degrees=degrees
+                )
+                + E_min
+            )
+            M = (
+                grain_boundary_mobility(
+                    theta,
+                    M_max=(M_max - M_min),
+                    n=n,
+                    B=B,
+                    theta_max=theta_max,
+                    degrees=degrees,
+                )
+                + M_min
+            )
+            fig.data[0].y = E
+            fig.data[1].y = M
+
+    return fig
+
+
+def get_array_edge_mask(arr):
+    """Get a boolean mask array that is True at the edge elements of an array."""
+    all_idx = np.indices(arr.shape)
+    mask = np.zeros_like(arr)
+    for dim_idx, dim_size in enumerate(arr.shape):
+        dim_mask = np.logical_or(all_idx[dim_idx] == 0, all_idx[dim_idx] == dim_size - 1)
+        mask = np.logical_or(mask, dim_mask)
+    return mask
+
+
+def update_plotly_figure_animation_slider_to_times(fig, times):
+
+    ani_steps = list(fig.layout.sliders[0]["steps"])
+    ani_steps_new = []
+    for idx, i in enumerate(ani_steps):
+        i["label"] = f"{round(times[idx]):_}"
+        ani_steps_new.append(i)
+
+    fig.update_layout(
+        sliders=[
+            {
+                "currentvalue": {"prefix": "Time = ", "suffix": " s"},
+                "steps": ani_steps_new,
+            }
+        ]
+    )
