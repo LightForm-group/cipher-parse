@@ -13,7 +13,11 @@ import plotly.express as px
 
 from cipher_parse.cipher_input import CIPHERInput
 from cipher_parse.geometry import CIPHERGeometry
-from cipher_parse.utilities import get_subset_indices, get_time_linear_subset_indices
+from cipher_parse.utilities import (
+    get_subset_indices,
+    get_time_linear_subset_indices,
+    update_plotly_figure_animation_slider_to_times,
+)
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
 DEFAULT_PARAVIEW_EXE = "pvbatch"
@@ -163,6 +167,7 @@ class CIPHEROutput:
         stdout_file_str,
         incremental_data,
         quiet=False,
+        cipher_input=None,
     ):
 
         default_options = {
@@ -185,7 +190,7 @@ class CIPHEROutput:
         self.incremental_data = incremental_data
         self.quiet = quiet
 
-        self._cipher_input = None
+        self._cipher_input = cipher_input or None
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
 
@@ -419,7 +424,7 @@ class CIPHEROutput:
         return data
 
     @classmethod
-    def from_JSON(cls, data, quiet=True):
+    def from_JSON(cls, data, cipher_input=None, quiet=True):
 
         attrs = {
             "directory": data["directory"],
@@ -437,7 +442,7 @@ class CIPHEROutput:
                     as_arr_val = np.array(attrs["incremental_data"][inc_idx][key])
                     attrs["incremental_data"][inc_idx][key] = as_arr_val
 
-        obj = cls(**attrs, quiet=quiet)
+        obj = cls(**attrs, cipher_input=cipher_input, quiet=quiet)
         geoms = [
             CIPHERGeometry.from_JSON(i, quiet=quiet) for i in data.get("geometries", [])
         ]
@@ -516,6 +521,7 @@ class CIPHEROutput:
                 max_prob_i,
                 _,
                 max_phase_size_i,
+                available_inc_idx,
             ) = cls._prepare_phase_size_dist_evolution_dataframe(
                 out_i,
                 use_phaseid=use_phaseid,
@@ -726,7 +732,7 @@ class CIPHEROutput:
 
             df_hist = df_hist.append(df_hist_i)
 
-        return df_hist, max_counts, max_prob, bin_size, max_phase_size
+        return df_hist, max_counts, max_prob, bin_size, max_phase_size, avail_inc_idx
 
     def show_phase_size_dist_evolution(
         self,
@@ -757,6 +763,7 @@ class CIPHEROutput:
             max_prob,
             bin_size,
             max_phase_size,
+            available_inc_idx,
         ) = self._prepare_phase_size_dist_evolution_dataframe(
             self,
             use_phaseid=use_phaseid,
@@ -809,6 +816,93 @@ class CIPHEROutput:
         fig.update_traces(width=bin_size)
         fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
 
+        times = [
+            i["time"]
+            for idx, i in enumerate(self.incremental_data)
+            if idx in available_inc_idx
+        ]
+        update_plotly_figure_animation_slider_to_times(fig, times)
+
+        return fig
+
+    def show_misorientation_dist_evolution(
+        self,
+        num_bins=None,
+        bin_size=None,
+        layout_args=None,
+    ):
+
+        all_misori_vox = []
+        inc_dat_indices = []
+        incs = []
+        times = []
+        max_misori = 0
+        for geom in self.geometries:
+            misori_voxels = geom.voxel_map.get_interface_idx(
+                self.cipher_input.geometry.misorientation_matrix
+            ).flatten()
+            misori_voxels = misori_voxels[misori_voxels != -1]
+            all_misori_vox.append(misori_voxels)
+            inc_dat_indices.append(geom.incremental_data_idx)
+            incs.append(geom.increment)
+            times.append(geom.time)
+            max_misori_i = misori_voxels.max()
+            if max_misori_i > max_misori:
+                max_misori = max_misori_i
+
+        if num_bins is not None and bin_size is not None:
+            raise TypeError(f"Specify exactly one of `num_bins` and `bin_size`.")
+        elif num_bins is None and bin_size is None:
+            num_bins = 50
+
+        if bin_size is None:
+            bin_size = max_misori / num_bins
+        else:
+            num_bins = int(max_misori / bin_size)
+
+        bin_edges = np.linspace(0, max_misori + (bin_size / 2), num=num_bins + 1)
+        bin_edges -= bin_size / 2  # so we have a bin centred on zero.
+
+        df_hist = pd.DataFrame()
+        max_counts = 0
+        for idx, voxels in enumerate(all_misori_vox):
+            counts, bins = np.histogram(voxels, bins=bin_edges)
+            max_counts_i = np.max(counts)
+            if max_counts_i > max_counts:
+                max_counts = max_counts_i
+            bin_centres = (np.array(bins) + (bin_size / 2))[:-1]
+            df_hist_i = pd.DataFrame(
+                {
+                    "incremental_data_idx": np.repeat(inc_dat_indices[idx], counts.size),
+                    "increment": np.repeat(incs[idx], counts.size),
+                    "time": np.repeat(times[idx], counts.size),
+                    "misorientation": bin_centres,
+                    "count": counts,
+                }
+            )
+            df_hist = df_hist.append(df_hist_i)
+
+        fig = px.bar(df_hist, x="misorientation", y="count", animation_frame="time")
+
+        # turn off frame transitions:
+        fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 0
+
+        fig.layout.update(
+            {
+                "xaxis": {
+                    "range": [
+                        -bin_size / 2,
+                        np.round(max_misori * 1.1, decimals=6),
+                    ],
+                    "title": "Misorientation /degrees",
+                },
+                "yaxis": {"range": [0, max_counts], "title": "Num. voxels"},
+                **(layout_args or {}),
+            }
+        )
+        fig.update_traces(width=bin_size)
+        fig.update_traces(marker_line={"width": 0})  # remove gap between stacked bars
+
         return fig
 
     def get_geometry(self, inc_data_index):
@@ -826,6 +920,8 @@ class CIPHEROutput:
             allow_missing_phases=True,
             quiet=True,
             time=inc_dat["time"],
+            increment=inc_dat["increment"],
+            incremental_data_idx=inc_data_index,
         )
         return geom
 
@@ -836,6 +932,7 @@ class CIPHEROutput:
             geom_0 = self.cipher_input.geometry
             if geom_0.time is None:
                 geom_0.time = 0
+                geom_0.increment = 0
             yield geom_0
 
         if self._geometries is not None:
@@ -865,11 +962,21 @@ class CIPHEROutput:
         data_label="phase",
         include=None,
         misorientation_matrix=None,
+        layout_args=None,
+        discrete_colours=None,
+        step_size=None,
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+        discrete_colours : dict, optional
+            If specified, a dict that maps slice data values to RGB three-tuples.
+        """
         slices = []
         times = []
-        for geom in self.geometries:
+        step_size = step_size or 1
+        for geom in self.geometries[::step_size]:
             slices.append(
                 geom.get_slice(
                     slice_index, normal_dir, data_label, include, misorientation_matrix
@@ -878,30 +985,51 @@ class CIPHEROutput:
             times.append(geom.time)
 
         slices = np.concatenate(slices)
-        min_val = np.min(slices)
-        max_val = np.max(slices)
-        fig = px.imshow(
-            img=slices,
-            animation_frame=0,
-            color_continuous_scale="viridis",
-            zmin=min_val,
-            zmax=max_val,
-            **kwargs,
-        )
+        if discrete_colours:
+            slice_RGB = np.tile(slices[..., None], (1, 1, 1, 3)).astype(float)
+            for k, v in discrete_colours.items():
+                slice_RGB[np.where(np.all(slice_RGB == k, axis=3))] = v
+            slices = slice_RGB
+            fig = px.imshow(
+                img=slices,
+                animation_frame=0,
+                **kwargs,
+            )
+        else:
+            min_val = np.min(slices)
+            max_val = np.max(slices)
+            fig = px.imshow(
+                img=slices,
+                animation_frame=0,
+                color_continuous_scale="viridis",
+                zmin=min_val,
+                zmax=max_val,
+                labels={"color": data_label},
+                **kwargs,
+            )
 
-        ani_steps = list(fig.layout.sliders[0]["steps"])
-        ani_steps_new = []
-        for idx, i in enumerate(ani_steps):
-            i["label"] = f"{round(times[idx]):_}"
-            ani_steps_new.append(i)
-
-        fig.update_layout(
-            sliders=[
-                {
-                    "currentvalue": {"prefix": "Time = ", "suffix": " s"},
-                    "steps": ani_steps_new,
-                }
-            ]
-        )
-
+        fig.update_layout(layout_args or {})
+        update_plotly_figure_animation_slider_to_times(fig, times)
         return fig
+
+    def get_average_radius_evolution(self, exclude=None):
+        """Get an evolution proportional to the average radius across all phases."""
+        exclude = exclude or []
+        all_phases_num_voxels = [[] for _ in range(self.geometries[0].num_phases)]
+        times = []
+        for dat_i in self.incremental_data:
+            if "num_voxels_per_phase" in dat_i:
+                for idx, i in enumerate(dat_i["num_voxels_per_phase"]):
+                    if idx in exclude:
+                        i = 0
+                    all_phases_num_voxels[idx].append(i)
+                times.append(dat_i["time"])
+
+        power = 1 / self.geometries[0].dimension
+        all_phases_prop_radius = np.array(
+            [np.power(i, power) for i in all_phases_num_voxels]
+        )
+        all_phases_prop_radius[np.isclose(all_phases_prop_radius, 0)] = np.nan
+        prop_avg_radius = np.nanmean(all_phases_prop_radius, axis=0)
+
+        return prop_avg_radius, np.array(times)

@@ -8,7 +8,10 @@ import numpy as np
 from scipy.spatial import Voronoi, Delaunay
 from plotly import graph_objects
 from plotly.colors import qualitative
+from plotly.subplots import make_subplots
 from vecmaths.geometry import get_box_xyz
+from ipywidgets import interact
+
 
 from cipher_parse.quats import axang2quat
 
@@ -547,7 +550,160 @@ def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
     frac_x = (coords - low_x) / (high_x - low_x)
     rots_deg = np.linspace(0, max_misorientation_deg, num=coords.size, endpoint=True)
     rots = np.deg2rad(rots_deg)
-    rots_quats = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
-    oris = np.zeros((coords.size, 4))
-    oris[np.argsort(frac_x)] = rots_quats
-    return oris
+    ori_range = np.array([axang2quat(axis=np.array([0, 0, 1]), angle=i) for i in rots])
+    ori_idx = np.argsort(frac_x)
+    return ori_range, ori_idx
+
+
+def generate_interface_energies_plot(
+    E_min=0,
+    M_min=0,
+    E_max=1,
+    M_max=1,
+    theta_max=50,
+    n=4,
+    B=5,
+):
+
+    degrees = True
+    theta = np.linspace(0, theta_max)
+
+    plot_energy = E_min is not None and E_max is not None
+    if plot_energy:
+        E = (
+            read_shockley(
+                theta,
+                E_max=(E_max - E_min),
+                theta_max=theta_max,
+                degrees=degrees,
+            )
+            + E_min
+        )
+    plot_mobility = M_min is not None and M_max is not None
+    if plot_mobility:
+        M = (
+            grain_boundary_mobility(
+                theta,
+                M_max=(M_max - M_min),
+                theta_max=theta_max,
+                n=n,
+                B=B,
+                degrees=degrees,
+            )
+            + M_min
+        )
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    if plot_energy:
+        fig.add_scatter(
+            x=theta, y=E, name="Read-Shockley", secondary_y=False, line_color="blue"
+        )
+    if plot_mobility:
+        fig.add_scatter(x=theta, y=M, name="mobility", secondary_y=True, line_color="red")
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_yaxes(showline=True, linewidth=1, linecolor="black", mirror=True)
+    fig.update_layout(
+        legend_y=0.1,
+        legend_x=0.9,
+        legend_xanchor="right",
+        legend_orientation="v",
+    )
+    fig.update_layout(
+        {
+            "width": 600,
+            "xaxis_title": "Misori. /degrees",
+        }
+    )
+    fig.update_yaxes(
+        tickformat=".1e",
+        secondary_y=False,
+        title="GB energy",
+        color="blue" if plot_mobility else None,
+    )
+    if plot_mobility:
+        fig.update_yaxes(
+            tickformat=".1e",
+            secondary_y=True,
+            color="red",
+        )
+    return fig
+
+
+def generate_energy_widget(
+    E_min=0, M_min=0, E_max=1, M_max=1, theta_max=50, n=4, B=5, degrees=True
+):
+
+    fig = generate_interface_energies_plot(
+        E_min=E_min,
+        M_min=M_min,
+        E_max=E_max,
+        M_max=M_max,
+        theta_max=theta_max,
+        n=n,
+        B=B,
+    )
+    theta = np.linspace(0, theta_max)
+
+    @interact(
+        n=(1.0, 50.0, 0.01),
+        B=(0, 50.0, 0.01),
+        E_min=(0, 1, 0.01),
+        M_min=(0, 1, 0.01),
+        E_max=(0, 1, 0.01),
+        M_max=(0, 1, 0.01),
+        theta_max=(0, 90, 0.01),
+    )
+    def update(
+        E_min=E_min, M_min=M_min, E_max=E_max, M_max=M_max, theta_max=theta_max, n=n, B=B
+    ):
+        with fig.batch_update():
+            E = (
+                read_shockley(
+                    theta, E_max=(E_max - E_min), theta_max=theta_max, degrees=degrees
+                )
+                + E_min
+            )
+            M = (
+                grain_boundary_mobility(
+                    theta,
+                    M_max=(M_max - M_min),
+                    n=n,
+                    B=B,
+                    theta_max=theta_max,
+                    degrees=degrees,
+                )
+                + M_min
+            )
+            fig.data[0].y = E
+            fig.data[1].y = M
+
+    return fig
+
+
+def get_array_edge_mask(arr):
+    """Get a boolean mask array that is True at the edge elements of an array."""
+    all_idx = np.indices(arr.shape)
+    mask = np.zeros_like(arr)
+    for dim_idx, dim_size in enumerate(arr.shape):
+        dim_mask = np.logical_or(all_idx[dim_idx] == 0, all_idx[dim_idx] == dim_size - 1)
+        mask = np.logical_or(mask, dim_mask)
+    return mask
+
+
+def update_plotly_figure_animation_slider_to_times(fig, times):
+
+    ani_steps = list(fig.layout.sliders[0]["steps"])
+    ani_steps_new = []
+    for idx, i in enumerate(ani_steps):
+        i["label"] = f"{round(times[idx]):_}"
+        ani_steps_new.append(i)
+
+    fig.update_layout(
+        sliders=[
+            {
+                "currentvalue": {"prefix": "Time = ", "suffix": " s"},
+                "steps": ani_steps_new,
+            }
+        ]
+    )

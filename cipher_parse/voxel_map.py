@@ -1,5 +1,6 @@
 import numpy as np
 import pyvista as pv
+from cipher_parse.utilities import get_array_edge_mask
 
 
 class VoxelMap:
@@ -89,7 +90,19 @@ class VoxelMap:
             Which direction to consider (-1, +1)
 
         """
-        return np.roll(self.region_ID, shift=direction, axis=dimension)
+
+        region = np.roll(self.region_ID, shift=direction, axis=dimension)
+
+        if not self.is_periodic:
+            idx = 0 if direction == 1 else -1
+            if dimension == 0:
+                region[idx] = self.region_ID[idx]
+            elif dimension == 1:
+                region[:, idx] = self.region_ID[:, idx]
+            elif dimension == 2:
+                region[:, :, idx] = self.region_ID[:, :, idx]
+
+        return region
 
     @property
     def region_ID_above(self):
@@ -206,6 +219,12 @@ class VoxelMap:
             print("done!")
         return interface_voxels
 
+    def get_interface_voxels(self):
+        interface_voxels = np.copy(self.region_ID)
+        interface_voxels[self.region_ID_bulk] = -1
+        interface_voxels[interface_voxels != -1] = 0
+        return interface_voxels
+
     def get_neighbour_list(self, quiet=False):
         """Get the pairs of regions that are neighbours"""
         if not quiet:
@@ -256,7 +275,6 @@ class VoxelMap:
         return neighbours
 
     def get_interface_idx(self, interface_map, as_3D=False):
-
         interface_idx_above_flat = interface_map[
             self.region_ID_flat, self.region_ID_above.reshape(-1)
         ]
@@ -310,12 +328,13 @@ class VoxelMap:
         interface_idx_all = np.sort(interface_idx_all, axis=0)[-1]
         interface_idx_all[self.region_ID_bulk] = -1
 
-        if self.dimension == 3:
-            return interface_idx_all
-        elif as_3D:
-            return interface_idx_all.T[:, :, None]
+        if not self.is_periodic:
+            interface_idx_all[get_array_edge_mask(interface_idx_all)] = -1
 
-        return interface_idx_all
+        if self.dimension == 2 and as_3D:
+            return interface_idx_all.T[:, :, None]
+        else:
+            return interface_idx_all
 
     @property
     def grid_size_3D(self):
@@ -353,6 +372,7 @@ class VoxelMap:
 
         grid.cell_data["data"] = self.region_ID.flatten(order="F")
 
-        pl = pv.PlotterITK()
+        # TODO: fix plotter to show multiple cell data
+        pl = pv.Plotter(notebook=True)
         pl.add_mesh(grid)
-        pl.show(ui_collapsed=False)
+        pl.show()

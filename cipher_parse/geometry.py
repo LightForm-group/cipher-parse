@@ -15,6 +15,8 @@ from cipher_parse.errors import (
     GeometryUnassignedPhasePairInterfaceError,
     GeometryVoxelPhaseError,
 )
+from cipher_parse.utilities import generate_interface_energies_plot
+from cipher_parse.quats import quat_angle_between
 
 
 class CIPHERGeometry:
@@ -26,10 +28,13 @@ class CIPHERGeometry:
         seeds=None,
         voxel_phase=None,
         voxel_map=None,
+        is_periodic=False,
         random_seed=None,
         allow_missing_phases=False,
         quiet=False,
         time=None,
+        increment=None,
+        incremental_data_idx=None,
     ):
         """
         Parameters
@@ -46,13 +51,15 @@ class CIPHERGeometry:
             voxel_map = VoxelMap(
                 region_ID=voxel_phase,
                 size=size,
-                is_periodic=True,
+                is_periodic=is_periodic,
                 quiet=quiet,
             )
         else:
             voxel_phase = voxel_map.region_ID
+            is_periodic = voxel_map.is_periodic
 
         self._interfaces = None
+        self._is_periodic = is_periodic
 
         self.voxel_map = voxel_map
         self.voxel_phase = voxel_phase
@@ -63,6 +70,8 @@ class CIPHERGeometry:
         self.size = np.asarray(size)
         self.allow_missing_phases = allow_missing_phases
         self.time = time
+        self.increment = increment
+        self.incremental_data_idx = incremental_data_idx
 
         for i in self.materials:
             i._geometry = self
@@ -147,12 +156,15 @@ class CIPHERGeometry:
             "size": self.size,
             "seeds": self.seeds,
             "voxel_phase": self.voxel_phase,
+            "is_periodic": self.is_periodic,
             "random_seed": self.random_seed,
             "misorientation_matrix": self.misorientation_matrix,
             "misorientation_matrix_is_degrees": self.misorientation_matrix_is_degrees,
             "allow_missing_phases": self.allow_missing_phases,
             "grain_boundaries": self._grain_boundaries,
             "time": self.time,
+            "increment": self.increment,
+            "incremental_data_idx": self.incremental_data_idx,
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
@@ -179,9 +191,12 @@ class CIPHERGeometry:
             "size": np.array(data["size"]),
             "seeds": np.array(data["seeds"]),
             "voxel_phase": np.array(data["voxel_phase"]),
+            "is_periodic": data.get("is_periodic", False),
             "random_seed": data["random_seed"],
             "allow_missing_phases": data.get("allow_missing_phases", False),
             "time": data.get("time"),
+            "increment": data.get("increment"),
+            "incremental_data_idx": data.get("incremental_data_idx"),
         }
         GBs = {}
         for phase_pair in data.get("grain_boundaries") or []:
@@ -193,10 +208,8 @@ class CIPHERGeometry:
                 "centroid": np.array(GB["centroid"]),
             }
         obj = cls(**data_init, quiet=quiet)
-        obj._misorientation_matrix = np.array(data["misorientation_matrix"])
-        obj._misorientation_matrix_is_degrees = np.array(
-            data["misorientation_matrix_is_degrees"]
-        )
+        if data["misorientation_matrix"] is not None:
+            obj._misorientation_matrix = np.array(data["misorientation_matrix"])
         obj._grain_boundaries = GBs or None
         return obj
 
@@ -218,6 +231,10 @@ class CIPHERGeometry:
     @property
     def interfaces(self):
         return self._interfaces
+
+    @property
+    def is_periodic(self):
+        return self._is_periodic
 
     @interfaces.setter
     def interfaces(self, interfaces):
@@ -612,6 +629,7 @@ class CIPHERGeometry:
         return int_map.astype(int)
 
     def get_interface_idx(self):
+        """Get the interface index associated with each voxel."""
         return self.voxel_map.get_interface_idx(self.interface_map_int)
 
     def get_interface_misorientation(self):
@@ -836,6 +854,18 @@ class CIPHERGeometry:
             return int_idx.T[:, :, None]
 
     @property
+    def voxel_interface(self):
+        return self.voxel_map.get_interface_voxels()
+
+    @property
+    def voxel_interface_3D(self):
+        int_vox = self.voxel_interface
+        if self.dimension == 3:
+            return int_vox
+        else:
+            return int_vox.T[:, :, None]
+
+    @property
     def voxel_phase_neighbours_3D(self):
         if self.dimension == 3:
             return self.voxel_phase_neighbours
@@ -854,10 +884,12 @@ class CIPHERGeometry:
         allowed_data = [
             "phase",
             "material",
+            "interface",
             "interface_idx",
             "phase_neighbours",
             "grain_boundaries",
             "GB_misorientation",
+            "IPF_z",
         ]
         if data_label not in allowed_data:
             raise ValueError(f"`data_label` must be one of: {allowed_data}.")
@@ -866,6 +898,8 @@ class CIPHERGeometry:
             data = self.voxel_phase_3D
         elif data_label == "material":
             data = self.voxel_material_3D
+        elif data_label == "interface":
+            data = self.voxel_interface_3D
         elif data_label == "interface_idx":
             data = self.voxel_interface_idx_3D
         elif data_label == "phase_neighbours":
@@ -874,6 +908,8 @@ class CIPHERGeometry:
             data = self.get_grain_boundary_map(as_3D=True)
         elif data_label == "GB_misorientation":
             data = self.voxel_map.get_interface_idx(misorientation_matrix, as_3D=True)
+        elif data_label == "IPF_z":
+            data = self.get_voxel_IPF(IPF_dir=None, as_3D=True)
 
         data = np.copy(data)
         if normal_dir == "x":
@@ -899,6 +935,8 @@ class CIPHERGeometry:
         data_label="phase",
         include=None,
         phase_centroids=False,
+        discrete_colours=None,
+        layout_args=None,
         **kwargs,
     ):
 
@@ -918,6 +956,12 @@ class CIPHERGeometry:
                 include,
             )
 
+        if discrete_colours:
+            slice_RGB = np.tile(slice_dat[..., None], (1, 1, 3)).astype(float)
+            for k, v in discrete_colours.items():
+                slice_RGB[np.where(np.all(slice_RGB == k, axis=2))] = v
+            slice_dat = slice_RGB
+
         fig = px.imshow(
             slice_dat,
             color_continuous_scale="viridis",
@@ -932,6 +976,7 @@ class CIPHERGeometry:
                 text=np.arange(cents.shape[0]),
                 mode="markers",
             )
+        fig.update_layout(layout_args or {})
         return fig
 
     def show(self):
@@ -945,9 +990,10 @@ class CIPHERGeometry:
         grid.cell_data["material"] = self.voxel_material_3D.flatten(order="F")
         grid.cell_data["phase"] = self.voxel_phase_3D.flatten(order="F")
 
-        pl = pv.PlotterITK()
+        # TODO: fix plotter to show multiple cell data
+        pl = pv.Plotter(notebook=True)
         pl.add_mesh(grid)
-        pl.show(ui_collapsed=False)
+        pl.show()
 
     def write_VTK(self, path):
 
@@ -1070,7 +1116,7 @@ class CIPHERGeometry:
         max_idx = 0
         for phase_type in self.phase_types:
             ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
-            max_idx = ori_idx[-1]
+            max_idx = ori_idx[-1] + 1
             phase_type.orientations = oris[ori_idx]
 
         self._phase_orientation = self._get_phase_orientation()
@@ -1094,14 +1140,14 @@ class CIPHERGeometry:
     def material_num_voxels(self):
         mat_num_vox = []
         for i in self.materials:
-            num_vox_i = sum(self.phase_num_voxels[j] for j in i.phases)
+            num_vox_i = sum(self.get_phase_num_voxels()[j] for j in i.phases)
             mat_num_vox.append(num_vox_i)
         return np.array(mat_num_vox)
 
     @property
     def phase_type_num_voxels(self):
         return np.array(
-            [np.sum(self.phase_num_voxels[i.phases]) for i in self.phase_types]
+            [np.sum(self.get_phase_num_voxels()[i.phases]) for i in self.phase_types]
         )
 
     @property
@@ -1119,6 +1165,20 @@ class CIPHERGeometry:
     @property
     def seeds_grid(self):
         return np.round(self.grid_size * self.seeds / self.size, decimals=0).astype(int)
+
+    def get_voxel_IPF(self, IPF_dir=None, as_3D=False):
+        if IPF_dir is None:
+            IPF_dir = np.array([0, 0, 1])
+        vox_oris = self.voxel_orientation
+        dms_oris = Orientation(vox_oris.reshape((-1, 4)), family="cubic")
+        IPF = dms_oris.IPF_color(IPF_dir)
+        shape = list(vox_oris.shape[:-1]) + [3]
+        vox_IPF = IPF.reshape(shape)
+
+        if self.dimension == 2 and as_3D:
+            return np.transpose(vox_IPF, axes=(1, 0, 2))[:, :, None, :]
+        else:
+            return vox_IPF
 
     def remove_interface(self, interface_name):
         """Remove an interface from the geometry. This will invalidate the geometry if
@@ -1152,3 +1212,115 @@ class CIPHERGeometry:
             return voxel_GBs.T[:, :, None]
 
         return voxel_GBs
+
+    def get_interface_energies_by_misorientation(self, misorientation_matrix=None):
+        energies_theta = []
+        if misorientation_matrix is None:
+            misorientation_matrix = self.misorientation_matrix
+        for interface_i in self.interfaces:
+            pp_neighbours = []
+            for pp in interface_i.phase_pairs:
+                pp_is_neighbours = np.any(
+                    np.all(pp[:, None] == self.neighbour_list, axis=0)
+                )
+                if pp_is_neighbours:
+                    pp_neighbours.append(pp)
+            pp_neighbours = np.array(pp_neighbours)
+            if pp_neighbours.size:
+                misoris = misorientation_matrix[pp_neighbours[:, 0], pp_neighbours[:, 1]]
+                energies_theta.append(
+                    {
+                        "energy": interface_i.properties["energy"]["e0"],
+                        "mobility": interface_i.properties["mobility"]["m0"],
+                        "misorientation": misoris,
+                        "phase_pairs": pp_neighbours,
+                    }
+                )
+        return energies_theta
+
+    def show_interface_energies_by_misorientation(
+        self,
+        interface_binning,
+        misorientation_matrix=None,
+        colour_by_bin=False,
+        layout_args=None,
+        show_mobility=True,
+    ):
+        energy_range = interface_binning.get("energy_range")
+        mobility_range = interface_binning.get("mobility_range")
+
+        if mobility_range is None:
+            M_min, M_max = None, None
+        else:
+            M_min, M_max = mobility_range
+
+        if energy_range is None:
+            E_min, E_max = None, None
+        else:
+            E_min, E_max = energy_range
+
+        fig = generate_interface_energies_plot(
+            E_min=E_min,
+            E_max=E_max,
+            M_min=M_min,
+            M_max=M_max,
+            theta_max=interface_binning["theta_max"],
+            n=interface_binning.get("n"),
+            B=interface_binning.get("B"),
+        )
+        e_y = []
+        m_y = []
+        x = []
+        color = []
+        hover = []
+        for bin_idx, bin_i in enumerate(
+            self.get_interface_energies_by_misorientation(misorientation_matrix)
+        ):
+            for m_i_idx, m_i in enumerate(bin_i["misorientation"]):
+                e_y.append(bin_i["energy"])
+                m_y.append(bin_i["mobility"])
+                x.append(m_i)
+                color.append(bin_idx)
+                hover.append(
+                    f"({bin_i['phase_pairs'][m_i_idx, 0], bin_i['phase_pairs'][m_i_idx, 1]})"
+                )
+
+        fig.add_scatter(
+            x=x,
+            y=e_y,
+            secondary_y=False,
+            mode="markers",
+            marker_color=color if colour_by_bin else "blue",
+            marker_size=5,
+            hovertext=hover,
+            name="Model GB energies",
+        )
+        if show_mobility:
+            fig.add_scatter(
+                x=x,
+                y=m_y,
+                secondary_y=True,
+                mode="markers",
+                marker_color=color if colour_by_bin else "red",
+                marker_size=5,
+                hovertext=hover,
+            )
+        fig.layout.title = f"Interface properties at increment {self.increment}"
+        fig.update_layout(layout_args or {})
+        return fig
+
+    def show_relative_misorientation(self, layout_args=None):
+        phase_centroids = self.get_phase_voxel_centroids()
+        idx = np.argmin(phase_centroids[:, 0])
+        fig = px.imshow(
+            np.rad2deg(
+                quat_angle_between(
+                    np.tile(
+                        self.phase_orientation[idx], (self.phase_orientation.shape[0], 1)
+                    ),
+                    self.phase_orientation,
+                )
+            )[self.voxel_phase].T
+        )
+        fig.layout.update(layout_args or {})
+        return fig
