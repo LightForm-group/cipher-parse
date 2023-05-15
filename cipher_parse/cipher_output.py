@@ -1011,3 +1011,25 @@ class CIPHEROutput:
         fig.update_layout(layout_args or {})
         update_plotly_figure_animation_slider_to_times(fig, times)
         return fig
+
+    def get_average_radius_evolution(self, exclude=None):
+        """Get an evolution proportional to the average radius across all phases."""
+        exclude = exclude or []
+        all_phases_num_voxels = [[] for _ in range(self.geometries[0].num_phases)]
+        times = []
+        for dat_i in self.incremental_data:
+            if "num_voxels_per_phase" in dat_i:
+                for idx, i in enumerate(dat_i["num_voxels_per_phase"]):
+                    if idx in exclude:
+                        i = 0
+                    all_phases_num_voxels[idx].append(i)
+                times.append(dat_i["time"])
+
+        power = 1 / self.geometries[0].dimension
+        all_phases_prop_radius = np.array(
+            [np.power(i, power) for i in all_phases_num_voxels]
+        )
+        all_phases_prop_radius[np.isclose(all_phases_prop_radius, 0)] = np.nan
+        prop_avg_radius = np.nanmean(all_phases_prop_radius, axis=0)
+
+        return prop_avg_radius, np.array(times)
