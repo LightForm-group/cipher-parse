@@ -538,7 +538,7 @@ def get_time_linear_subset_indices(time_interval, max_time, times):
         num=int(((max_time + time_interval) / time_interval)),
         endpoint=True,
     )
-    return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1)))
+    return list(set(np.argmin(np.abs(times - intervals[:, None]), axis=1).tolist()))
 
 
 def sample_from_orientations_gradient(phase_centroids, max_misorientation_deg):
