@@ -349,7 +349,7 @@ class CIPHEROutput:
                 arr = arr_flat.reshape(mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
-                standard_outputs[name] = arr
+                standard_outputs[name] = np.array(arr) # convert from pyvista_ndarray
 
             derived_outputs = {}
             for derive_out_i in self.options["derive_outputs"]:
