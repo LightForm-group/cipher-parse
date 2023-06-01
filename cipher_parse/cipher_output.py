@@ -277,15 +277,22 @@ class CIPHEROutput:
         )
 
         # Move all VTU files to a sub-directory:
-        viz_dir = Path("original_viz")
-        viz_dir.mkdir()
+        viz_dir = self.directory / "original_viz"
+        
         vtu_orig_file_list = []
-        for viz_file_i in vtu_file_list:
-            dst_i = viz_dir.joinpath(viz_file_i.name).with_suffix(
-                ".viz" + viz_file_i.suffix
-            )
-            shutil.move(viz_file_i, dst_i)
-            vtu_orig_file_list.append(dst_i)
+        if not viz_dir.is_dir():
+            viz_dir.mkdir()
+            for viz_file_i in vtu_file_list:
+                dst_i = viz_dir.joinpath(viz_file_i.name).with_suffix(
+                    ".viz" + viz_file_i.suffix
+                )
+                shutil.move(viz_file_i, dst_i)
+                vtu_orig_file_list.append(dst_i)
+        else:
+            vtu_orig_file_list = sorted(
+            list(viz_dir.glob("*")),
+            key=lambda x: int(re.search(r"\d+", x.name).group()),
+        )
 
         # Copy back to the root directory VTU files that we want to keep:
         if self.options["num_VTU_files"]:
@@ -302,7 +309,7 @@ class CIPHEROutput:
 
         for i in viz_files_keep_idx:
             viz_file_i = vtu_orig_file_list[i]
-            dst_i = Path("").joinpath(viz_file_i.name).with_suffix("").with_suffix(".vtu")
+            dst_i = self.directory.joinpath(viz_file_i.name).with_suffix("").with_suffix(".vtu")
             shutil.copy(viz_file_i, dst_i)
 
         if self.options["delete_VTUs"]:
