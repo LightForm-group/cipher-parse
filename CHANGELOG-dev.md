@@ -1,4 +1,18 @@
 
+<a name="v0.5.1a0"></a>
+## [v0.5.1a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0...v0.5.1a0) - 2023.06.01
+
+### 🐛 Bug Fixes
+
+* cast pyvista_ndarray to numpy ndarray
+* get_time_linear_subset_indices should return primitive types
+* get_incremental_data if original_viz dir exists
+
+
+<a name="v0.5.0"></a>
+## [v0.5.0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a3...v0.5.0) - 2023.05.15
+
+
 <a name="v0.5.0a3"></a>
 ## [v0.5.0a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a2...v0.5.0a3) - 2023.05.15
 
