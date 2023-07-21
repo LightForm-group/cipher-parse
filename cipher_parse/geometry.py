@@ -16,7 +16,7 @@ from cipher_parse.errors import (
     GeometryVoxelPhaseError,
 )
 from cipher_parse.utilities import generate_interface_energies_plot
-from cipher_parse.quats import quat_angle_between
+from cipher_parse.quats import compute_misorientation_matrix, quat_angle_between
 
 
 class CIPHERGeometry:
@@ -379,7 +379,6 @@ class CIPHERGeometry:
         the specified phases of associated material."""
 
         for i in self.interfaces:
-
             # assign materials as well as phase_types if materials not assigned to
             # interface:
             if not i.materials:
@@ -522,7 +521,6 @@ class CIPHERGeometry:
             ints_by_phase_type_pair[int_def.phase_types].append(int_def)
 
         for pt_pair, int_defs in ints_by_phase_type_pair.items():
-
             names = [i.name for i in int_defs]
             if len(set(names)) < len(names):
                 raise ValueError(
@@ -670,7 +668,6 @@ class CIPHERGeometry:
             )
             return
 
-        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         all_oris = np.ones((self.num_phases, 4)) * np.nan
         for i in self.phase_types:
             all_oris[i.phases] = i.orientations
@@ -680,24 +677,7 @@ class CIPHERGeometry:
                 "Not all orientations are accounted for in the phase type definitions."
             )
 
-        all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
-
-        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
-        for idx in range(self.num_phases):
-            print(
-                f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
-                flush=True,
-            )
-            ori_i = all_oris[idx : idx + 1]
-            other_oris = all_oris[idx + 1 :]
-            if other_oris.size:
-                disori_i = ori_i.disorientation(other_oris).as_axis_angle()[..., -1]
-                misori_matrix[idx, idx + 1 :] = disori_i
-                misori_matrix[idx + 1 :, idx] = disori_i
-
-        if degrees:
-            misori_matrix = np.rad2deg(misori_matrix)
-
+        misori_matrix = compute_misorientation_matrix(all_oris, degrees)
         self._misorientation_matrix = misori_matrix
         self._misorientation_matrix_is_degrees = degrees
 
@@ -728,7 +708,6 @@ class CIPHERGeometry:
         volume_fractions,
         random_seed=None,
     ):
-
         print(
             "Randomly assigning phases to materials according to volume_fractions...",
             end="",
@@ -754,7 +733,6 @@ class CIPHERGeometry:
         random_seed=None,
         is_periodic=False,
     ):
-
         if sum(i is not None for i in (seeds, num_phases)) != 1:
             raise ValueError(f"Specify exactly one of `seeds` and `num_phases`")
 
@@ -880,7 +858,6 @@ class CIPHERGeometry:
         include=None,
         misorientation_matrix=None,
     ):
-
         allowed_data = [
             "phase",
             "material",
@@ -939,7 +916,6 @@ class CIPHERGeometry:
         layout_args=None,
         **kwargs,
     ):
-
         if "misorientation_matrix" in kwargs:
             slice_dat = self.get_slice(
                 slice_index,
@@ -996,7 +972,6 @@ class CIPHERGeometry:
         pl.show()
 
     def write_VTK(self, path):
-
         grid = self.get_pyvista_grid()
 
         grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
