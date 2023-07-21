@@ -1,4 +1,12 @@
 
+<a name="v0.5.1a1"></a>
+## [v0.5.1a1](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a0...v0.5.1a1) - 2023.07.21
+
+### ✨ Features
+
+* use DefDAP to compute CIPHERGeometry.misorientation_matrix - much faster
+
+
 <a name="v0.5.1a0"></a>
 ## [v0.5.1a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0...v0.5.1a0) - 2023.06.01
 
