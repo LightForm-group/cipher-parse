@@ -11,7 +11,7 @@ import pyvista as pv
 import pandas as pd
 import plotly.express as px
 
-from cipher_parse.cipher_input import CIPHERInput
+from cipher_parse.cipher_input import CIPHERInput, decompress_1D_array_string
 from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.utilities import (
     get_subset_indices,
@@ -166,10 +166,12 @@ class CIPHEROutput:
         input_YAML_file_str,
         stdout_file_str,
         incremental_data,
+        input_map_voxel_phase=None,
+        input_map_phase_material=None,
+        input_map_interface=None,
         quiet=False,
         cipher_input=None,
     ):
-
         default_options = {
             "paraview_exe": DEFAULT_PARAVIEW_EXE,
             "delete_VTIs": True,
@@ -185,6 +187,9 @@ class CIPHEROutput:
         self.options = {**default_options, **options}
         self.input_YAML_file_name = input_YAML_file_name
         self.input_YAML_file_str = input_YAML_file_str
+        self.input_map_voxel_phase = input_map_voxel_phase
+        self.input_map_phase_material = input_map_phase_material
+        self.input_map_interface = input_map_interface
         self.stdout_file_name = stdout_file_name
         self.stdout_file_str = stdout_file_str
         self.incremental_data = incremental_data
@@ -227,11 +232,23 @@ class CIPHEROutput:
         with stdout_path.open("rt") as fp:
             stdout_file_str = "".join(fp.readlines())
 
+        (
+            voxel_phase,
+            phase_material,
+            interface_map,
+        ) = CIPHERInput.get_input_maps_from_files(
+            inp_file_str=input_YAML_file_str,
+            directory=directory,
+        )
+
         obj = cls(
             directory=directory,
             options=options,
             input_YAML_file_name=input_YAML_file_name,
             input_YAML_file_str=input_YAML_file_str,
+            input_map_voxel_phase=voxel_phase,
+            input_map_phase_material=phase_material,
+            input_map_interface=interface_map,
             stdout_file_name=stdout_file_name,
             stdout_file_str=stdout_file_str,
             incremental_data=None,
@@ -278,7 +295,7 @@ class CIPHEROutput:
 
         # Move all VTU files to a sub-directory:
         viz_dir = self.directory / "original_viz"
-        
+
         vtu_orig_file_list = []
         if not viz_dir.is_dir():
             viz_dir.mkdir()
@@ -290,9 +307,9 @@ class CIPHEROutput:
                 vtu_orig_file_list.append(dst_i)
         else:
             vtu_orig_file_list = sorted(
-            list(viz_dir.glob("*")),
-            key=lambda x: int(re.search(r"\d+", x.name).group()),
-        )
+                list(viz_dir.glob("*")),
+                key=lambda x: int(re.search(r"\d+", x.name).group()),
+            )
 
         # Copy back to the root directory VTU files that we want to keep:
         if self.options["num_VTU_files"]:
@@ -309,7 +326,11 @@ class CIPHEROutput:
 
         for i in viz_files_keep_idx:
             viz_file_i = vtu_orig_file_list[i]
-            dst_i = self.directory.joinpath(viz_file_i.name).with_suffix("").with_suffix(".vtu")
+            dst_i = (
+                self.directory.joinpath(viz_file_i.name)
+                .with_suffix("")
+                .with_suffix(".vtu")
+            )
             shutil.copy(viz_file_i, dst_i)
 
         if self.options["delete_VTUs"]:
@@ -331,7 +352,6 @@ class CIPHEROutput:
 
         incremental_data = []
         for file_i_idx, file_i in enumerate(vti_file_list):
-
             mesh = pv.get_reader(file_i).read()
             vtu_file_name = file_i.name.replace("vti", "vtu")
             inc_data_i = {
@@ -349,7 +369,7 @@ class CIPHEROutput:
                 arr = arr_flat.reshape(mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
-                standard_outputs[name] = np.array(arr) # convert from pyvista_ndarray
+                standard_outputs[name] = np.array(arr)  # convert from pyvista_ndarray
 
             derived_outputs = {}
             for derive_out_i in self.options["derive_outputs"]:
@@ -385,7 +405,11 @@ class CIPHEROutput:
     def cipher_input(self):
         if not self._cipher_input:
             self._cipher_input = CIPHERInput.from_input_YAML_str(
-                self.input_YAML_file_str, quiet=self.quiet
+                file_str=self.input_YAML_file_str,
+                quiet=self.quiet,
+                input_map_voxel_phase=self.input_map_voxel_phase,
+                input_map_phase_material=self.input_map_phase_material,
+                input_map_interface=self.input_map_interface,
             )
         return self._cipher_input
 
@@ -406,9 +430,21 @@ class CIPHEROutput:
     def get_input_YAML_data(self, parse_interface_map=False):
         """Get some basic input details (using the YAML input file) without initialising
         the CIPHERInput object, which can take a while depending on the grid size."""
-        return CIPHERInput.read_input_YAML_string(
-            self.input_YAML_file_str, parse_interface_map=parse_interface_map
+        dat = CIPHERInput.read_input_YAML_string(
+            self.input_YAML_file_str,
+            parse_interface_map=parse_interface_map,
         )
+        if self.input_map_voxel_phase:
+            dat["voxel_phase"] = self.input_map_voxel_phase
+            dat["unique_phase_IDs"] = np.unique(self.input_map_voxel_phase)
+
+        if self.input_map_phase_material:
+            dat["phase_material"] = self.input_map_phase_material
+
+        if self.input_map_interface:
+            dat["interface_map"] = self.input_map_interface
+
+        return dat
 
     def to_JSON(self, keep_arrays=False):
         data = {
@@ -416,6 +452,9 @@ class CIPHEROutput:
             "options": self.options,
             "input_YAML_file_name": self.input_YAML_file_name,
             "input_YAML_file_str": self.input_YAML_file_str,
+            "input_map_voxel_phase": self.input_map_voxel_phase,
+            "input_map_phase_material": self.input_map_phase_material,
+            "input_map_interface": self.input_map_interface,
             "stdout_file_name": self.stdout_file_name,
             "stdout_file_str": self.stdout_file_str,
             "incremental_data": self.incremental_data,
@@ -428,20 +467,44 @@ class CIPHEROutput:
                         as_list_val = data["incremental_data"][inc_idx][key].tolist()
                         data["incremental_data"][inc_idx][key] = as_list_val
 
+            if data["input_map_voxel_phase"] is not None:
+                data["input_map_voxel_phase"] = data["input_map_voxel_phase"].tolist()
+
+            if data["input_map_phase_material"] is not None:
+                data["input_map_phase_material"] = data[
+                    "input_map_phase_material"
+                ].tolist()
+
+            if data["input_map_interface"] is not None:
+                data["input_map_interface"] = data["input_map_interface"].tolist()
+
         return data
 
     @classmethod
     def from_JSON(cls, data, cipher_input=None, quiet=True):
-
         attrs = {
             "directory": data["directory"],
             "options": data["options"],
             "input_YAML_file_name": data["input_YAML_file_name"],
             "input_YAML_file_str": data["input_YAML_file_str"],
+            "input_map_voxel_phase": data["input_map_voxel_phase"],
+            "input_map_phase_material": data["input_map_phase_material"],
+            "input_map_interface": data["input_map_interface"],
             "stdout_file_name": data["stdout_file_name"],
             "stdout_file_str": data["stdout_file_str"],
             "incremental_data": data["incremental_data"],
         }
+
+        if attrs["input_map_voxel_phase"]:
+            attrs["input_map_voxel_phase"] = np.array(attrs["input_map_voxel_phase"])
+
+        if attrs["input_map_phase_material"]:
+            attrs["input_map_phase_material"] = np.array(
+                attrs["input_map_phase_material"]
+            )
+
+        if attrs["input_map_interface"]:
+            attrs["input_map_interface"] = np.array(attrs["input_map_interface"])
 
         for inc_idx, inc_i in enumerate(attrs["incremental_data"] or []):
             for key, val in inc_i.items():
@@ -487,7 +550,6 @@ class CIPHEROutput:
         label_name=None,
         layout_args=None,
     ):
-
         if len(cipher_outputs) > 1 and not (row_labels or col_labels or labels):
             raise TypeError(
                 "Multiple cipher outputs but not labels/row_labels/col_labels "
@@ -719,7 +781,6 @@ class CIPHEROutput:
                     }
                 )
             else:
-
                 if inc_idx == 0:
                     initial_bins = bins[bin_indices_i - 1]
 
@@ -838,7 +899,6 @@ class CIPHEROutput:
         bin_size=None,
         layout_args=None,
     ):
-
         all_misori_vox = []
         inc_dat_indices = []
         incs = []
