@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 from dataclasses import dataclass
+from textwrap import indent
 from typing import Optional, List, Union, Tuple, Dict
 
 import numpy as np
@@ -610,13 +611,13 @@ class CIPHERInput:
             vox_phase_map = "voxel_phase_mapping.txt"
             int_map = "interface_mapping.txt"
             with Path(phase_mat_map).open("wt") as fh:
-                fh.write(phase_mat_str)
+                fh.write(indent(phase_mat_str, "    "))
 
             with Path(vox_phase_map).open("wt") as fh:
-                fh.write(vox_phase_str)
+                fh.write(indent(vox_phase_str, "    "))
 
             with Path(int_map).open("wt") as fh:
-                fh.write(int_str)
+                fh.write(indent(int_str, "    "))
 
         else:
             phase_mat_map = LiteralScalarString(phase_mat_str)
