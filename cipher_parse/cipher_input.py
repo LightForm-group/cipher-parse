@@ -179,7 +179,7 @@ class CIPHERInput:
             phase_material,
             interface_map,
         ) = CIPHERInput.get_input_maps_from_files(
-            file_str=file_str,
+            inp_file_str=file_str,
             directory=path.parent,
         )
 
