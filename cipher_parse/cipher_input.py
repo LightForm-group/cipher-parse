@@ -142,7 +142,7 @@ class CIPHERInput:
             i.exists() for i in (voxel_phase_file, phase_material_file, interface_file)
         ):
             inp_dat = cls.read_input_YAML_string(
-                input_YAML_file_str=inp_file_str,
+                file_str=inp_file_str,
                 parse_interface_map=False,
             )
         if voxel_phase_file.exists():
@@ -194,7 +194,7 @@ class CIPHERInput:
         with Path(path).open("rt") as fp:
             file_str = "".join(fp.readlines())
 
-        return cls.read_input_YAML_string(file_str)
+        return cls.read_input_YAML_string(file_str=file_str)
 
     @staticmethod
     def read_input_YAML_string(file_str, parse_interface_map=True):

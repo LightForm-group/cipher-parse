@@ -431,7 +431,7 @@ class CIPHEROutput:
         """Get some basic input details (using the YAML input file) without initialising
         the CIPHERInput object, which can take a while depending on the grid size."""
         dat = CIPHERInput.read_input_YAML_string(
-            self.input_YAML_file_str,
+            file_str=self.input_YAML_file_str,
             parse_interface_map=parse_interface_map,
         )
         if self.input_map_voxel_phase:
