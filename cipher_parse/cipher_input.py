@@ -257,14 +257,14 @@ class CIPHERInput:
         """Generate a CIPHERInput object from a CIPHER input YAML file string."""
 
         yaml_dat = cls.read_input_YAML_string(file_str)
-        if input_map_voxel_phase:
+        if input_map_voxel_phase is not None:
             yaml_dat["voxel_phase"] = input_map_voxel_phase
             yaml_dat["unique_phase_IDs"] = np.unique(input_map_voxel_phase)
 
-        if input_map_phase_material:
+        if input_map_phase_material is not None:
             yaml_dat["phase_material"] = input_map_phase_material
 
-        if input_map_interface:
+        if input_map_interface is not None:
             yaml_dat["interface_map"] = input_map_interface
 
         materials = [

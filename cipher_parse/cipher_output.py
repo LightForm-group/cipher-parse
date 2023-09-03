@@ -434,14 +434,14 @@ class CIPHEROutput:
             file_str=self.input_YAML_file_str,
             parse_interface_map=parse_interface_map,
         )
-        if self.input_map_voxel_phase:
+        if self.input_map_voxel_phase is not None:
             dat["voxel_phase"] = self.input_map_voxel_phase
             dat["unique_phase_IDs"] = np.unique(self.input_map_voxel_phase)
 
-        if self.input_map_phase_material:
+        if self.input_map_phase_material is not None:
             dat["phase_material"] = self.input_map_phase_material
 
-        if self.input_map_interface:
+        if self.input_map_interface is not None:
             dat["interface_map"] = self.input_map_interface
 
         return dat
