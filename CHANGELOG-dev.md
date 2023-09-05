@@ -1,4 +1,20 @@
 
+<a name="v0.5.1a2"></a>
+## [v0.5.1a2](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a1...v0.5.1a2) - 2023.09.05
+
+### ✨ Features
+
+* support separate text files for mappings
+
+### 🐛 Bug Fixes
+
+* DefDAP uses P=+1 for quat ops where we were assuming P=-1
+* tests
+* try indenting
+* func args
+* func args
+
+
 <a name="v0.5.1a1"></a>
 ## [v0.5.1a1](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a0...v0.5.1a1) - 2023.07.21
 
