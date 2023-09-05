@@ -655,6 +655,7 @@ class CIPHERInput:
         B=5,
         bin_width=5,
         degrees=True,
+        **kwargs,
     ):
         if energy_range is None and mobility_range is None:
             raise ValueError(
@@ -662,7 +663,7 @@ class CIPHERInput:
             )
 
         if self.geometry.misorientation_matrix is None:
-            misori_matrix = self.geometry.get_misorientation_matrix()
+            misori_matrix = self.geometry.get_misorientation_matrix(**kwargs)
         else:
             misori_matrix = self.geometry.misorientation_matrix
 
