@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 from dataclasses import dataclass
+from textwrap import indent
 from typing import Optional, List, Union, Tuple, Dict
 
 import numpy as np
@@ -17,11 +18,9 @@ from cipher_parse.utilities import set_by_path, read_shockley, grain_boundary_mo
 
 
 def compress_1D_array(arr):
-
     vals = []
     nums = []
     for idx, i in enumerate(arr):
-
         if idx == 0:
             vals.append(i)
             nums.append(1)
@@ -130,25 +129,76 @@ class CIPHERInput:
         return cls(**data, quiet=quiet)
 
     @classmethod
+    def get_input_maps_from_files(cls, inp_file_str, directory):
+        directory = Path(directory)
+        voxel_phase_file = Path(directory / "voxel_phase_mapping.txt")
+        phase_material_file = Path(directory / "phase_material_mapping.txt")
+        interface_file = Path(directory / "interface_mapping.txt")
+
+        inp_dat = None
+        voxel_phase = None
+        phase_material = None
+        interface_map = None
+        if any(
+            i.exists() for i in (voxel_phase_file, phase_material_file, interface_file)
+        ):
+            inp_dat = cls.read_input_YAML_string(
+                file_str=inp_file_str,
+                parse_interface_map=False,
+            )
+        if voxel_phase_file.exists():
+            with voxel_phase_file.open("rt") as fp:
+                voxel_phase_str = "".join(fp.readlines())
+                voxel_phase = decompress_1D_array_string(voxel_phase_str)
+                voxel_phase = voxel_phase.reshape(inp_dat["grid_size"], order="F") - 1
+
+        if phase_material_file.exists():
+            with phase_material_file.open("rt") as fp:
+                phase_material_str = "".join(fp.readlines())
+                phase_material = decompress_1D_array_string(phase_material_str) - 1
+
+        if interface_file.exists():
+            num_phases = inp_dat["num_phases"]
+            with interface_file.open("rt") as fp:
+                interface_str = "".join(fp.readlines())
+                interface_map = decompress_1D_array_string(interface_str)
+                interface_map = interface_map.reshape((num_phases, num_phases)) - 1
+                interface_map[np.tril_indices(num_phases)] = -1  # only need one half
+
+        return (voxel_phase, phase_material, interface_map)
+
+    @classmethod
     def from_input_YAML_file(cls, path):
         """Generate a CIPHERInput object from a CIPHER input YAML file."""
 
         with Path(path).open("rt") as fp:
             file_str = "".join(fp.readlines())
 
-        return cls.from_input_YAML_str(file_str)
+        (
+            voxel_phase,
+            phase_material,
+            interface_map,
+        ) = CIPHERInput.get_input_maps_from_files(
+            inp_file_str=file_str,
+            directory=path.parent,
+        )
+
+        return cls.from_input_YAML_str(
+            file_str=file_str,
+            input_map_voxel_phase=voxel_phase,
+            input_map_phase_material=phase_material,
+            input_map_interface=interface_map,
+        )
 
     @classmethod
     def read_input_YAML_file(cls, path):
-
         with Path(path).open("rt") as fp:
             file_str = "".join(fp.readlines())
 
-        return cls.read_input_YAML_string(file_str)
+        return cls.read_input_YAML_string(file_str=file_str)
 
     @staticmethod
     def read_input_YAML_string(file_str, parse_interface_map=True):
-
         yaml = YAML(typ="safe")
         data = yaml.load(file_str)
 
@@ -157,23 +207,30 @@ class CIPHERInput:
         size = header["size"]
         num_phases = header["n_phases"]
 
-        voxel_phase = decompress_1D_array_string(data["mappings"]["voxel_phase_mapping"])
-        voxel_phase = voxel_phase.reshape(grid_size, order="F") - 1
-
-        unique_phase_IDs = np.unique(voxel_phase)
-        assert len(unique_phase_IDs) == num_phases
+        voxel_phase = None
+        unique_phase_IDs = None
+        if data["mappings"]["voxel_phase_mapping"] != "voxel_phase_mapping.txt":
+            voxel_phase = decompress_1D_array_string(
+                data["mappings"]["voxel_phase_mapping"]
+            )
+            voxel_phase = voxel_phase.reshape(grid_size, order="F") - 1
+            unique_phase_IDs = np.unique(voxel_phase)
+            assert len(unique_phase_IDs) == num_phases
 
         interface_map = None
-        if parse_interface_map:
-            interface_map = decompress_1D_array_string(
-                data["mappings"]["interface_mapping"]
-            )
-            interface_map = interface_map.reshape((num_phases, num_phases)) - 1
-            interface_map[np.tril_indices(num_phases)] = -1  # only need one half
+        if data["mappings"]["interface_mapping"] != "interface_mapping.txt":
+            if parse_interface_map:
+                interface_map = decompress_1D_array_string(
+                    data["mappings"]["interface_mapping"]
+                )
+                interface_map = interface_map.reshape((num_phases, num_phases)) - 1
+                interface_map[np.tril_indices(num_phases)] = -1  # only need one half
 
-        phase_material = (
-            decompress_1D_array_string(data["mappings"]["phase_material_mapping"]) - 1
-        )
+        phase_material = None
+        if data["mappings"]["phase_material_mapping"] != "phase_material_mapping.txt":
+            phase_material = (
+                decompress_1D_array_string(data["mappings"]["phase_material_mapping"]) - 1
+            )
 
         return {
             "header": header,
@@ -190,10 +247,27 @@ class CIPHERInput:
         }
 
     @classmethod
-    def from_input_YAML_str(cls, file_str, quiet=False):
+    def from_input_YAML_str(
+        cls,
+        file_str,
+        input_map_voxel_phase=None,
+        input_map_phase_material=None,
+        input_map_interface=None,
+        quiet=False,
+    ):
         """Generate a CIPHERInput object from a CIPHER input YAML file string."""
 
         yaml_dat = cls.read_input_YAML_string(file_str)
+        if input_map_voxel_phase is not None:
+            yaml_dat["voxel_phase"] = input_map_voxel_phase
+            yaml_dat["unique_phase_IDs"] = np.unique(input_map_voxel_phase)
+
+        if input_map_phase_material is not None:
+            yaml_dat["phase_material"] = input_map_phase_material
+
+        if input_map_interface is not None:
+            yaml_dat["interface_map"] = input_map_interface
+
         materials = [
             MaterialDefinition(
                 name=name,
@@ -253,7 +327,6 @@ class CIPHERInput:
         random_seed=None,
         is_periodic=False,
     ):
-
         geometry = CIPHERGeometry.from_voronoi(
             num_phases=num_phases,
             seeds=seeds,
@@ -287,7 +360,6 @@ class CIPHERInput:
         random_seed=None,
         is_periodic=False,
     ):
-
         return cls.from_voronoi(
             seeds=seeds,
             grid_size=grid_size,
@@ -315,7 +387,6 @@ class CIPHERInput:
         random_seed=None,
         is_periodic=False,
     ):
-
         return cls.from_voronoi(
             num_phases=num_phases,
             grid_size=grid_size,
@@ -341,7 +412,6 @@ class CIPHERInput:
         solution_parameters,
         random_seed=None,
     ):
-
         geometry = CIPHERGeometry(
             voxel_phase=voxel_phase,
             materials=materials,
@@ -369,7 +439,6 @@ class CIPHERInput:
         container_labels=None,
         phase_type_map=None,
     ):
-
         default_container_labels = {
             "SyntheticVolumeDataContainer": "SyntheticVolumeDataContainer",
             "CellData": "CellData",
@@ -389,7 +458,6 @@ class CIPHERInput:
         container_labels = {**default_container_labels, **container_labels}
 
         with h5py.File(path, "r") as fp:
-
             voxel_phase_path = "/".join(
                 (
                     "DataContainers",
@@ -517,10 +585,44 @@ class CIPHERInput:
     def get_interfaces(self):
         return {i.name: i.properties for i in self.geometry.interfaces}
 
-    def write_yaml(self, path):
-        """Write the CIPHER input YAML file."""
+    def write_yaml(self, path, separate_mappings=False):
+        """Write the CIPHER input YAML file.
+
+        Parameters
+        ----------
+        separate_mappings
+            If True, write separate text files for the mappings.
+
+        """
 
         self.geometry._validate_interface_map()
+
+        phase_mat_str = compress_1D_array_string(self.geometry.phase_material + 1) + "\n"
+        vox_phase_str = (
+            compress_1D_array_string(self.geometry.voxel_phase.flatten(order="F") + 1)
+            + "\n"
+        )
+        int_str = (
+            compress_1D_array_string(self.geometry.interface_map_int.flatten() + 1) + "\n"
+        )
+
+        if separate_mappings:
+            phase_mat_map = "phase_material_mapping.txt"
+            vox_phase_map = "voxel_phase_mapping.txt"
+            int_map = "interface_mapping.txt"
+            with Path(phase_mat_map).open("wt") as fh:
+                fh.write(indent(phase_mat_str, "    "))
+
+            with Path(vox_phase_map).open("wt") as fh:
+                fh.write(indent(vox_phase_str, "    "))
+
+            with Path(int_map).open("wt") as fh:
+                fh.write(indent(int_str, "    "))
+
+        else:
+            phase_mat_map = LiteralScalarString(phase_mat_str)
+            vox_phase_map = LiteralScalarString(vox_phase_str)
+            int_map = LiteralScalarString(int_str)
 
         cipher_input_data = {
             "header": self.get_header(),
@@ -530,21 +632,9 @@ class CIPHERInput:
             },
             "interface": {k: copy.deepcopy(v) for k, v in self.get_interfaces().items()},
             "mappings": {
-                "phase_material_mapping": LiteralScalarString(
-                    compress_1D_array_string(self.geometry.phase_material + 1) + "\n"
-                ),
-                "voxel_phase_mapping": LiteralScalarString(
-                    compress_1D_array_string(
-                        self.geometry.voxel_phase.flatten(order="F") + 1
-                    )
-                    + "\n"
-                ),
-                "interface_mapping": LiteralScalarString(
-                    compress_1D_array_string(
-                        self.geometry.interface_map_int.flatten() + 1
-                    )
-                    + "\n"
-                ),
+                "phase_material_mapping": phase_mat_map,
+                "voxel_phase_mapping": vox_phase_map,
+                "interface_mapping": int_map,
             },
         }
 
@@ -565,6 +655,7 @@ class CIPHERInput:
         B=5,
         bin_width=5,
         degrees=True,
+        **kwargs,
     ):
         if energy_range is None and mobility_range is None:
             raise ValueError(
@@ -572,7 +663,7 @@ class CIPHERInput:
             )
 
         if self.geometry.misorientation_matrix is None:
-            misori_matrix = self.geometry.get_misorientation_matrix()
+            misori_matrix = self.geometry.get_misorientation_matrix(**kwargs)
         else:
             misori_matrix = self.geometry.misorientation_matrix
 
@@ -619,7 +710,6 @@ class CIPHERInput:
             )
 
         for int_name in base_interface_name:
-
             base_defn, phase_pairs = self.geometry.remove_interface(int_name)
 
             phase_pairs_bin_idx = bin_idx[phase_pairs[0], phase_pairs[1]]
@@ -630,7 +720,6 @@ class CIPHERInput:
             print("Preparing new interface defintions...")
             new_int_idx = 0
             for bin_idx_i, bin_i in enumerate(misori_bins, start=1):
-
                 phase_pairs_bin_i_idx = np.where(phase_pairs_bin_idx == bin_idx_i)[0]
                 if not phase_pairs_bin_i_idx.size:
                     continue
@@ -789,7 +878,6 @@ class CIPHERInput:
         num_existing_int_defns = len(self.geometry.interfaces)
         print("Preparing new interface defintions...", end="")
         for idx, i in enumerate(new_interfaces_data):
-
             props = copy.deepcopy(base_defn.properties)
             for name, val in zip(property_name, i["values"]):
                 new_value = val.item()  #  convert from numpy to native

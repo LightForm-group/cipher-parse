@@ -1,6 +1,7 @@
 import numpy as np
 
 from defdap.quat import Quat
+from damask import Orientation
 
 
 def quat_conjugate(quats_arr):
@@ -279,6 +280,8 @@ def compute_misorientation_matrix(quat_comps, degrees=False, quiet=False):
 
     """
 
+    # DefDAP uses P=+1, but we assume P=-1 for now (same as DAMASK):
+    quat_comps[:, 1:] *= -1
     num_quats = len(quat_comps)
     quat_objs = np.empty(num_quats, dtype=Quat)
 
@@ -297,6 +300,38 @@ def compute_misorientation_matrix(quat_comps, degrees=False, quiet=False):
     # make precisely symmetric
     misori_matrix = np.triu(misori_matrix)
     misori_matrix = misori_matrix + misori_matrix.T - np.diag(np.diag(misori_matrix))
+
+    if degrees:
+        misori_matrix = np.rad2deg(misori_matrix)
+
+    return misori_matrix
+
+
+def compute_misorientation_matrix_damask(quat_comps, degrees=False, quiet=False):
+    """Use DefDAP to calculate an N-by-N symmetric matrix of disorientation angles between
+    an array of N quaternions.
+
+    Parameter
+    ---------
+    degrees
+        If True, return the misorientation array in degrees rather than radians.
+
+    """
+    num_quats = len(quat_comps)
+    all_oris = Orientation(quat_comps, family="cubic")
+
+    misori_matrix = np.zeros((num_quats, num_quats), dtype=float)
+    for idx in range(num_quats):
+        print(
+            f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
+            flush=True,
+        )
+        ori_i = all_oris[idx : idx + 1]
+        other_oris = all_oris[idx + 1 :]
+        if other_oris.size:
+            disori_i = ori_i.disorientation(other_oris).as_axis_angle()[..., -1]
+            misori_matrix[idx, idx + 1 :] = disori_i
+            misori_matrix[idx + 1 :, idx] = disori_i
 
     if degrees:
         misori_matrix = np.rad2deg(misori_matrix)

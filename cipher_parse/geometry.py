@@ -16,7 +16,11 @@ from cipher_parse.errors import (
     GeometryVoxelPhaseError,
 )
 from cipher_parse.utilities import generate_interface_energies_plot
-from cipher_parse.quats import compute_misorientation_matrix, quat_angle_between
+from cipher_parse.quats import (
+    compute_misorientation_matrix,
+    quat_angle_between,
+    compute_misorientation_matrix_damask,
+)
 
 
 class CIPHERGeometry:
@@ -658,7 +662,7 @@ class CIPHERGeometry:
                 f"definition: {phase_idx_int_is_nan}."
             )
 
-    def get_misorientation_matrix(self, degrees=True, overwrite=False):
+    def get_misorientation_matrix(self, degrees=True, overwrite=False, method="defdap"):
         """Given phase type definitions that include orientation lists, get the
         misorientation matrix between all pairs."""
 
@@ -677,7 +681,11 @@ class CIPHERGeometry:
                 "Not all orientations are accounted for in the phase type definitions."
             )
 
-        misori_matrix = compute_misorientation_matrix(all_oris, degrees)
+        if method == "defdap":
+            misori_matrix = compute_misorientation_matrix(all_oris, degrees)
+        elif method == "damask":
+            misori_matrix = compute_misorientation_matrix_damask(all_oris, degrees)
+
         self._misorientation_matrix = misori_matrix
         self._misorientation_matrix_is_degrees = degrees
 
