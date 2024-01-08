@@ -1,4 +1,12 @@
 
+<a name="v0.5.1a4"></a>
+## [v0.5.1a4](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a3...v0.5.1a4) - 2024.01.08
+
+### 🐛 Bug Fixes
+
+* more reasonable time in notebook examples
+
+
 <a name="v0.5.1a3"></a>
 ## [v0.5.1a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a2...v0.5.1a3) - 2024.01.08
 
