@@ -1,4 +1,13 @@
 
+<a name="v0.5.1a3"></a>
+## [v0.5.1a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a2...v0.5.1a3) - 2024.01.08
+
+### 🐛 Bug Fixes
+
+* clear notebook outputs
+* interface width is now expected within the interface definitions
+
+
 <a name="v0.5.1a2"></a>
 ## [v0.5.1a2](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a1...v0.5.1a2) - 2023.09.05
 
