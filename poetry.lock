@@ -587,6 +587,25 @@ files = [
 colorama = {version = "*", markers = "platform_system == \"Windows\""}
 
 [[package]]
+name = "cmocean"
+version = "3.1.3"
+description = "Colormaps for Oceanography"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "cmocean-3.1.3-py3-none-any.whl", hash = "sha256:b088f4409b0e40e3d9946ca165c62015806963dccfdb39b235301085157f999d"},
+    {file = "cmocean-3.1.3.tar.gz", hash = "sha256:a4599a765e679477323292a8f62631439e16e92c3e5cb4f14c5264fc6d232a10"},
+]
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+packaging = "*"
+
+[package.extras]
+plots = ["colorspacious", "viscm"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -1882,6 +1901,31 @@ docs = ["docutils (<0.20)", "ipykernel", "jinja2", "jupyter-client", "jupyter-se
 test = ["ipykernel", "pre-commit", "pytest (>=7.0)", "pytest-console-scripts", "pytest-jupyter[server] (>=0.4)", "pytest-timeout", "requests"]
 
 [[package]]
+name = "jupyter-server-proxy"
+version = "4.1.2"
+description = "A Jupyter server extension to run additional processes and proxy to them that comes bundled JupyterLab extension to launch pre-defined processes."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "jupyter_server_proxy-4.1.2-py3-none-any.whl", hash = "sha256:f97bd0c6bbba4931d8ae22bef872703c9785fc1258c4bc196955e2bd034f3eaa"},
+    {file = "jupyter_server_proxy-4.1.2.tar.gz", hash = "sha256:6fd8ce88a0100e637b48f1d3aa32f09672bcb2813dc057d70567f0a40b1237f5"},
+]
+
+[package.dependencies]
+aiohttp = "*"
+importlib-metadata = {version = ">=4.8.3", markers = "python_version < \"3.10\""}
+jupyter-server = ">=1.0"
+simpervisor = ">=1.0"
+tornado = ">=5.1"
+traitlets = ">=4.2.1"
+
+[package.extras]
+acceptance = ["jupyter-server-proxy[test]", "robotframework-jupyterlibrary (>=0.4.2)"]
+classic = ["jupyter-server (<2)", "jupyterlab (>=3.0.0,<4.0.0a0)", "notebook (<7.0.0a0)"]
+lab = ["jupyter-server (>=2)", "jupyterlab (>=4.0.5,<5.0.0a0)", "nbclassic", "notebook (>=7)"]
+test = ["pytest", "pytest-asyncio", "pytest-cov", "pytest-html"]
+
+[[package]]
 name = "jupyter-server-terminals"
 version = "0.4.4"
 description = "A Jupyter Server Extension Providing Terminals."
@@ -2043,6 +2087,30 @@ files = [
     {file = "lazy_object_proxy-1.9.0-cp39-cp39-win32.whl", hash = "sha256:9090d8e53235aa280fc9239a86ae3ea8ac58eff66a705fa6aa2ec4968b95c821"},
     {file = "lazy_object_proxy-1.9.0-cp39-cp39-win_amd64.whl", hash = "sha256:db1c1722726f47e10e0b5fdbf15ac3b8adb58c091d12b3ab713965795036985f"},
 ]
+
+[[package]]
+name = "markdown-it-py"
+version = "3.0.0"
+description = "Python port of markdown-it. Markdown parsing, done right!"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "markdown-it-py-3.0.0.tar.gz", hash = "sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb"},
+    {file = "markdown_it_py-3.0.0-py3-none-any.whl", hash = "sha256:355216845c60bd96232cd8d8c40e8f9765cc86f46880e43a8fd22dc1a1a8cab1"},
+]
+
+[package.dependencies]
+mdurl = ">=0.1,<1.0"
+
+[package.extras]
+benchmarking = ["psutil", "pytest", "pytest-benchmark"]
+code-style = ["pre-commit (>=3.0,<4.0)"]
+compare = ["commonmark (>=0.9,<1.0)", "markdown (>=3.4,<4.0)", "mistletoe (>=1.0,<2.0)", "mistune (>=2.0,<3.0)", "panflute (>=2.3,<3.0)"]
+linkify = ["linkify-it-py (>=1,<3)"]
+plugins = ["mdit-py-plugins"]
+profiling = ["gprof2dot"]
+rtd = ["jupyter_sphinx", "mdit-py-plugins", "myst-parser", "pyyaml", "sphinx", "sphinx-copybutton", "sphinx-design", "sphinx_book_theme"]
+testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions"]
 
 [[package]]
 name = "markupsafe"
@@ -2239,6 +2307,35 @@ files = [
     {file = "mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e"},
     {file = "mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325"},
 ]
+
+[[package]]
+name = "mdurl"
+version = "0.1.2"
+description = "Markdown URL utilities"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
+    {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
+]
+
+[[package]]
+name = "meshio"
+version = "5.3.5"
+description = "I/O for many mesh formats"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "meshio-5.3.5-py3-none-any.whl", hash = "sha256:0736c6e34ecc768f62f2cde5d8233a3529512a9399b25c68ea2ca0d5900cdc10"},
+    {file = "meshio-5.3.5.tar.gz", hash = "sha256:f21f01abd9f29ba06ea119304b3d39e610421cfe93b9dd23362834919f87586d"},
+]
+
+[package.dependencies]
+numpy = ">=1.20.0"
+rich = "*"
+
+[package.extras]
+all = ["h5py", "netCDF4"]
 
 [[package]]
 name = "mistune"
@@ -2930,13 +3027,13 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pooch"
-version = "1.7.0"
+version = "1.8.1"
 description = "\"Pooch manages your Python library's sample data files: it automatically downloads and stores them in a local directory, with support for versioning and corruption checks.\""
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pooch-1.7.0-py3-none-any.whl", hash = "sha256:74258224fc33d58f53113cf955e8d51bf01386b91492927d0d1b6b341a765ad7"},
-    {file = "pooch-1.7.0.tar.gz", hash = "sha256:f174a1041b6447f0eef8860f76d17f60ed2f857dc0efa387a7f08228af05d998"},
+    {file = "pooch-1.8.1-py3-none-any.whl", hash = "sha256:6b56611ac320c239faece1ac51a60b25796792599ce5c0b1bb87bf01df55e0a9"},
+    {file = "pooch-1.8.1.tar.gz", hash = "sha256:27ef63097dd9a6e4f9d2694f5cfbf2f0a5defa44fccafec08d601e731d746270"},
 ]
 
 [package.dependencies]
@@ -3284,29 +3381,40 @@ files = [
 
 [[package]]
 name = "pyvista"
-version = "0.39.0"
+version = "0.43.4"
 description = "Easier Pythonic interface to VTK"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "pyvista-0.39.0-py3-none-any.whl", hash = "sha256:e7132aa2232c7e9c4096354e45938d9d59527c0ea79047b4f1ccadeaacc5ddce"},
-    {file = "pyvista-0.39.0.tar.gz", hash = "sha256:55e1f668100cb803285053d4c4e0091225be2aef4875c614aa142478d20b4f60"},
+    {file = "pyvista-0.43.4-py3-none-any.whl", hash = "sha256:f1fc56ac9ea1447660dec91e06b37f48736fd6983a2ed9fb2780252724b1caeb"},
+    {file = "pyvista-0.43.4.tar.gz", hash = "sha256:e0b950d8283ba4e1333801d1d5fcdb2fa2f03a64e085b5b04ed8b7dcca6a7ac7"},
 ]
 
 [package.dependencies]
+cmocean = {version = "*", optional = true, markers = "extra == \"colormaps\""}
+colorcet = {version = "*", optional = true, markers = "extra == \"colormaps\""}
+imageio = {version = "*", optional = true, markers = "extra == \"io\""}
+ipywidgets = {version = "*", optional = true, markers = "extra == \"jupyter\""}
+jupyter-server-proxy = {version = "*", optional = true, markers = "extra == \"jupyter\""}
 matplotlib = ">=3.0.1"
-numpy = "*"
+meshio = {version = ">=5.2", optional = true, markers = "extra == \"io\""}
+nest-asyncio = {version = "*", optional = true, markers = "extra == \"jupyter\""}
+numpy = ">=1.21.0"
 pillow = "*"
 pooch = "*"
 scooby = ">=0.5.1"
+trame = {version = ">=2.5.2", optional = true, markers = "extra == \"jupyter\""}
+trame-client = {version = ">=2.12.7", optional = true, markers = "extra == \"jupyter\""}
+trame-server = {version = ">=2.11.7", optional = true, markers = "extra == \"jupyter\""}
+trame-vtk = {version = ">=2.5.8", optional = true, markers = "extra == \"jupyter\""}
+trame-vuetify = {version = ">=2.3.1", optional = true, markers = "extra == \"jupyter\""}
 vtk = "*"
 
 [package.extras]
-all = ["cmocean", "colorcet", "imageio", "ipyvtklink", "ipywidgets", "jupyter-server-proxy", "meshio (>=5.2)", "nest-asyncio", "panel", "pythreejs", "trame (>=2.2.6)", "trame-client (>=2.4.2)", "trame-server (>=2.8.0)", "trame-vtk (>=2.4.0)"]
+all = ["pyvista[colormaps,io,jupyter]"]
 colormaps = ["cmocean", "colorcet"]
 io = ["imageio", "meshio (>=5.2)"]
-jupyter = ["ipyvtklink", "ipywidgets", "jupyter-server-proxy", "nest-asyncio", "panel", "pythreejs", "trame (>=2.2.6)", "trame-client (>=2.4.2)", "trame-server (>=2.8.0)", "trame-vtk (>=2.4.0)"]
-trame = ["trame (>=2.2.6)", "trame-client (>=2.4.2)", "trame-server (>=2.8.0)", "trame-vtk (>=2.4.0)"]
+jupyter = ["ipywidgets", "jupyter-server-proxy", "nest-asyncio", "trame (>=2.5.2)", "trame-client (>=2.12.7)", "trame-server (>=2.11.7)", "trame-vtk (>=2.5.8)", "trame-vuetify (>=2.3.1)"]
 
 [[package]]
 name = "pywavelets"
@@ -3585,6 +3693,25 @@ files = [
 ]
 
 [[package]]
+name = "rich"
+version = "13.7.1"
+description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
+optional = false
+python-versions = ">=3.7.0"
+files = [
+    {file = "rich-13.7.1-py3-none-any.whl", hash = "sha256:4edbae314f59eb482f54e9e30bf00d33350aaa94f4bfcd4e9e3110e64d0d7222"},
+    {file = "rich-13.7.1.tar.gz", hash = "sha256:9be308cb1fe2f1f57d67ce99e95af38a1e2bc71ad9813b0e247cf7ffbcc3a432"},
+]
+
+[package.dependencies]
+markdown-it-py = ">=2.2.0"
+pygments = ">=2.13.0,<3.0.0"
+typing-extensions = {version = ">=4.0.0,<5.0", markers = "python_version < \"3.9\""}
+
+[package.extras]
+jupyter = ["ipywidgets (>=7.5.1,<9)"]
+
+[[package]]
 name = "ruamel-yaml"
 version = "0.17.26"
 description = "ruamel.yaml is a YAML parser/emitter that supports roundtrip preservation of comments, seq/map flow style, and map key order"
@@ -3738,13 +3865,13 @@ test = ["asv", "gmpy2", "mpmath", "pooch", "pytest", "pytest-cov", "pytest-timeo
 
 [[package]]
 name = "scooby"
-version = "0.7.2"
+version = "0.9.2"
 description = "A Great Dane turned Python environment detective"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "scooby-0.7.2-py3-none-any.whl", hash = "sha256:75b77d22ecc22a5578fb0bb2957e8d024fa863fe905cd43447a86860afe37978"},
-    {file = "scooby-0.7.2.tar.gz", hash = "sha256:6ba082ede5a82952b42538f913b3dfe3581ab79f5628e6c6efd3481f6cb5756e"},
+    {file = "scooby-0.9.2-py3-none-any.whl", hash = "sha256:3cbc59de9febf8c8ba1e01bc7d08b4eca18ece3212d38b08a6f45188f88c8ea9"},
+    {file = "scooby-0.9.2.tar.gz", hash = "sha256:28df643bb7c2087547b2e2220070e2f89e815ddbc515fbc28dd5df2b0a14293e"},
 ]
 
 [package.extras]
@@ -3781,6 +3908,20 @@ files = [
 docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-favicon", "sphinx-hoverxref (<2)", "sphinx-inline-tabs", "sphinx-lint", "sphinx-notfound-page (==0.8.3)", "sphinx-reredirects", "sphinxcontrib-towncrier"]
 testing = ["build[virtualenv]", "filelock (>=3.4.0)", "flake8 (<5)", "flake8-2020", "ini2toml[lite] (>=0.9)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pip (>=19.1)", "pip-run (>=8.8)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)", "pytest-perf", "pytest-timeout", "pytest-xdist", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
 testing-integration = ["build[virtualenv]", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
+
+[[package]]
+name = "simpervisor"
+version = "1.0.0"
+description = "Simple async process supervisor"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "simpervisor-1.0.0-py3-none-any.whl", hash = "sha256:3e313318264559beea3f475ead202bc1cd58a2f1288363abb5657d306c5b8388"},
+    {file = "simpervisor-1.0.0.tar.gz", hash = "sha256:7eb87ca86d5e276976f5bb0290975a05d452c6a7b7f58062daea7d8369c823c1"},
+]
+
+[package.extras]
+test = ["aiohttp", "psutil", "pytest", "pytest-asyncio", "pytest-cov"]
 
 [[package]]
 name = "six"
@@ -4247,40 +4388,43 @@ test = ["numpy", "pandas", "pytest", "xarray"]
 
 [[package]]
 name = "trame"
-version = "2.4.2"
+version = "2.5.2"
 description = "Trame, a framework to build applications in plain Python"
 optional = false
 python-versions = "*"
 files = [
-    {file = "trame-2.4.2-py3-none-any.whl", hash = "sha256:d958783e4d7a99d1a0ba3c301ee3279c47c63944b71ced397637b86b5d2f5065"},
-    {file = "trame-2.4.2.tar.gz", hash = "sha256:28a3f8e99da5b9eeb633a23f0921cd0610dc52d4e01ef6fac22ad848416f95b8"},
+    {file = "trame-2.5.2-py3-none-any.whl", hash = "sha256:2948be7691cbcbbfa64144581acc825a669bb47a2d76b78d728db21be008daa5"},
+    {file = "trame-2.5.2.tar.gz", hash = "sha256:875320353517c133312e46dc87c66050f721f045fd8817cd394fe06363e84ce2"},
 ]
 
 [package.dependencies]
-trame-client = ">=2.1.0"
-trame-components = "2.1.0"
-trame-deckgl = "2.0.1"
-trame-markdown = "2.0.2"
-trame-matplotlib = "2.0.1"
-trame-plotly = "2.1.0"
+trame-client = ">=2.7.7"
+trame-components = "<3.0.0"
+trame-deckgl = "<3.0.0"
+trame-markdown = "<3.0.0"
+trame-matplotlib = "<3.0.0"
+trame-plotly = "<3.0.0"
 trame-rca = "<3.0.0"
-trame-router = "2.0.1"
-trame-server = ">=2.11.0"
+trame-router = "<3.0.0"
+trame-server = ">=2.11.7"
 trame-simput = "<3.0.0"
-trame-vega = "2.0.2"
+trame-vega = "<3.0.0"
 trame-vtk = "<3.0.0"
 trame-vuetify = "<3.0.0"
 
 [[package]]
 name = "trame-client"
-version = "2.7.5"
+version = "2.16.5"
 description = "Internal client of trame"
 optional = false
 python-versions = "*"
 files = [
-    {file = "trame-client-2.7.5.tar.gz", hash = "sha256:54457d9cc9216c92e2c2ad855efaf41b951bd1d4d8010ad19df00dc9f1a16238"},
-    {file = "trame_client-2.7.5-py3-none-any.whl", hash = "sha256:3743838c900ddc968f7b930bed269742371038a47e61d333156009c97d27a188"},
+    {file = "trame-client-2.16.5.tar.gz", hash = "sha256:db4d5dc77760f30e9e6fc4d8e3f5b44a9177ad6ad567551824fa10bb165d9f72"},
+    {file = "trame_client-2.16.5-py3-none-any.whl", hash = "sha256:055fb58be2003044700fd16615ba960842e7a4e832ca8d2a4d912ca5f4e60397"},
 ]
+
+[package.extras]
+test = ["Pillow", "pixelmatch", "pytest", "pytest-xprocess", "seleniumbase"]
 
 [[package]]
 name = "trame-components"
@@ -4383,13 +4527,13 @@ trame-client = "*"
 
 [[package]]
 name = "trame-server"
-version = "2.11.0"
+version = "2.11.7"
 description = "Internal server side implementation of trame"
 optional = false
 python-versions = "*"
 files = [
-    {file = "trame-server-2.11.0.tar.gz", hash = "sha256:9838553a8f9f4b81bc746bc39e5380212890c660b437e8aebdff3ac372a8418d"},
-    {file = "trame_server-2.11.0-py3-none-any.whl", hash = "sha256:93a9525bc3f72bee80ec35d37622259c585a34b76210c22c2d9ecd979fa956a8"},
+    {file = "trame-server-2.11.7.tar.gz", hash = "sha256:6cca8f1f786bc7b121925524be85ce1ee9440a9911eaa16564e9af764dca6cd3"},
+    {file = "trame_server-2.11.7-py3-none-any.whl", hash = "sha256:450e5b2ba450ebace4ed1cc37bda5d5a5a233963c7ea3f0965a6f6ea0319f26f"},
 ]
 
 [package.dependencies]
@@ -4426,13 +4570,13 @@ trame-client = "*"
 
 [[package]]
 name = "trame-vtk"
-version = "2.4.4"
+version = "2.8.5"
 description = "VTK widgets for trame"
 optional = false
 python-versions = "*"
 files = [
-    {file = "trame-vtk-2.4.4.tar.gz", hash = "sha256:718663b3a8c95dd59f8f932ee2bda609b3b418790d4ff5e2a241aa743e65b29f"},
-    {file = "trame_vtk-2.4.4-py3-none-any.whl", hash = "sha256:9c1ae2f68348f741aa9d9408d5f298613aa636adffd3d1fd35e6d17fd619e560"},
+    {file = "trame-vtk-2.8.5.tar.gz", hash = "sha256:bd370840de78a73ed112948da6c8de66711e84003c76da0d1258a3ef5ba587d9"},
+    {file = "trame_vtk-2.8.5-py3-none-any.whl", hash = "sha256:b89c6a164b6ec7e63b8a181547a7dda2a859f0fb16835e2686afc861d8c7b397"},
 ]
 
 [package.dependencies]
@@ -4440,13 +4584,13 @@ trame-client = "*"
 
 [[package]]
 name = "trame-vuetify"
-version = "2.2.4"
+version = "2.4.3"
 description = "Vuetify widgets for trame"
 optional = false
 python-versions = "*"
 files = [
-    {file = "trame-vuetify-2.2.4.tar.gz", hash = "sha256:41316c16cf6af2446e980a0bbc32a549209bb27cc5fd4d18b87945e607ccc69a"},
-    {file = "trame_vuetify-2.2.4-py3-none-any.whl", hash = "sha256:fede3b08db60f50e0f6ab36594c662c6cee010b7514376bfdfbece8a5c2ba9ee"},
+    {file = "trame-vuetify-2.4.3.tar.gz", hash = "sha256:aa96059cb739244cf023f9af83f6b446e2207ebe3faff33a6f73f34efaf26eb7"},
+    {file = "trame_vuetify-2.4.3-py3-none-any.whl", hash = "sha256:a3d05d714b78241d61fb5c76f65754e4b26afae67a3667a2daf47b399035f69c"},
 ]
 
 [package.dependencies]
@@ -4921,4 +5065,4 @@ notebook = ["notebook"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<3.11"
-content-hash = "d251f7abd73aa3726138e2e7d9119e651d0b7fbcbcea8a2a761964ae2e650eff"
+content-hash = "795f5ba111959e2e7960a43fbed69050e28c0527009739e9d5682e8f0d57c817"
