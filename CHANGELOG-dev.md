@@ -1,4 +1,12 @@
 
+<a name="v0.6.0a1"></a>
+## [v0.6.0a1](https://github.com/LightForm-group/cipher-parse/compare/v0.6.0a0...v0.6.0a1) - 2024.03.28
+
+### 🐛 Bug Fixes
+
+* use pyvista to resample VTU files onto a grid
+
+
 <a name="v0.6.0a0"></a>
 ## [v0.6.0a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a4...v0.6.0a0) - 2024.03.28
 
