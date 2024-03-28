@@ -1,4 +1,67 @@
 
+<a name="v0.6.0a0"></a>
+## [v0.6.0a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a4...v0.6.0a0) - 2024.03.28
+
+### ✨ Features
+
+* add to/from_zarr (without CIPHERGeometry support for now
+
+
+<a name="v0.5.1a4"></a>
+## [v0.5.1a4](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a3...v0.5.1a4) - 2024.01.08
+
+### 🐛 Bug Fixes
+
+* more reasonable time in notebook examples
+
+
+<a name="v0.5.1a3"></a>
+## [v0.5.1a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a2...v0.5.1a3) - 2024.01.08
+
+### 🐛 Bug Fixes
+
+* clear notebook outputs
+* interface width is now expected within the interface definitions
+
+
+<a name="v0.5.1a2"></a>
+## [v0.5.1a2](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a1...v0.5.1a2) - 2023.09.05
+
+### ✨ Features
+
+* support separate text files for mappings
+
+### 🐛 Bug Fixes
+
+* DefDAP uses P=+1 for quat ops where we were assuming P=-1
+* tests
+* try indenting
+* func args
+* func args
+
+
+<a name="v0.5.1a1"></a>
+## [v0.5.1a1](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a0...v0.5.1a1) - 2023.07.21
+
+### ✨ Features
+
+* use DefDAP to compute CIPHERGeometry.misorientation_matrix - much faster
+
+
+<a name="v0.5.1a0"></a>
+## [v0.5.1a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0...v0.5.1a0) - 2023.06.01
+
+### 🐛 Bug Fixes
+
+* cast pyvista_ndarray to numpy ndarray
+* get_time_linear_subset_indices should return primitive types
+* get_incremental_data if original_viz dir exists
+
+
+<a name="v0.5.0"></a>
+## [v0.5.0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a3...v0.5.0) - 2023.05.15
+
+
 <a name="v0.5.0a3"></a>
 ## [v0.5.0a3](https://github.com/LightForm-group/cipher-parse/compare/v0.5.0a2...v0.5.0a3) - 2023.05.15
 
