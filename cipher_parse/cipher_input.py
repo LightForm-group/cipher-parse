@@ -129,7 +129,14 @@ class CIPHERInput:
         return cls(**data, quiet=quiet)
 
     @classmethod
-    def get_input_maps_from_files(cls, inp_file_str, directory):
+    def get_input_maps_from_files(
+        cls,
+        inp_file_str,
+        directory,
+        get_voxel_phase=True,
+        get_phase_material=True,
+        get_interface=True,
+    ):
         directory = Path(directory)
         voxel_phase_file = Path(directory / "voxel_phase_mapping.txt")
         phase_material_file = Path(directory / "phase_material_mapping.txt")
@@ -146,18 +153,18 @@ class CIPHERInput:
                 file_str=inp_file_str,
                 parse_interface_map=False,
             )
-        if voxel_phase_file.exists():
+        if get_voxel_phase and voxel_phase_file.exists():
             with voxel_phase_file.open("rt") as fp:
                 voxel_phase_str = "".join(fp.readlines())
                 voxel_phase = decompress_1D_array_string(voxel_phase_str)
                 voxel_phase = voxel_phase.reshape(inp_dat["grid_size"], order="F") - 1
 
-        if phase_material_file.exists():
+        if get_phase_material and phase_material_file.exists():
             with phase_material_file.open("rt") as fp:
                 phase_material_str = "".join(fp.readlines())
                 phase_material = decompress_1D_array_string(phase_material_str) - 1
 
-        if interface_file.exists():
+        if get_interface and interface_file.exists():
             num_phases = inp_dat["num_phases"]
             with interface_file.open("rt") as fp:
                 interface_str = "".join(fp.readlines())
