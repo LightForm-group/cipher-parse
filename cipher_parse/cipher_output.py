@@ -22,7 +22,6 @@ from cipher_parse.utilities import (
 )
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
-DEFAULT_PARAVIEW_EXE = "pvbatch"
 INC_DATA_NON_ARRAYS = (
     "increment",
     "time",
@@ -109,53 +108,6 @@ def parse_cipher_stdout(path_or_string, is_string=False):
     return out
 
 
-def generate_VTI_files_from_VTU_files(
-    sampling_dimensions,
-    paraview_exe=DEFAULT_PARAVIEW_EXE,
-):
-    """Generate a 'ParaView-python' script for generating VTI files from VTU files and
-    execute that script."""
-
-    script_name = "vtu2vti.py"
-    if len(sampling_dimensions) == 2:
-        sampling_dimensions += [1]
-
-    with Path(script_name).open("wt") as fp:
-        fp.write(
-            dedent(
-                f"""
-            import os
-
-            from paraview.simple import *
-
-            vtu_files = []
-            for root, dirs, files in os.walk("."):
-                for f in files:
-                    if f.endswith(".vtu"):
-                        vtu_files.append(f)
-            
-            for file_i_path in vtu_files:
-                file_i_base_name = file_i_path.split(".")[0]
-                vtu_data_i = XMLUnstructuredGridReader(
-                    FileName=[os.getcwd() + os.path.sep + file_i_path]
-                )
-                resampleToImage1 = ResampleToImage(Input=vtu_data_i)
-                resampleToImage1.SamplingDimensions = {sampling_dimensions!r}
-                SetActiveSource(resampleToImage1)
-                SaveData(file_i_base_name + ".vti", resampleToImage1)
-        """
-            )
-        )
-
-    proc = run(f"{paraview_exe} {script_name}", shell=True, stdout=PIPE, stderr=PIPE)
-    stdout = proc.stdout.decode()
-    stderr = proc.stderr.decode()
-    if stdout:
-        print(stdout)
-    if stderr:
-        print(stderr)
-
-
 class CIPHEROutput:
     """Class to hold output information from a CIPHER simulation."""
 
@@ -175,12 +127,6 @@ class CIPHEROutput:
         cipher_input=None,
     ):
         default_options = {
-            "paraview_exe": DEFAULT_PARAVIEW_EXE,
-            "delete_VTIs": True,
-            "delete_VTUs": False,
-            "use_existing_VTIs": False,
-            "num_VTU_files": None,
-            "VTU_files_time_interval": None,
             "derive_outputs": None,
             "save_outputs": None,
         }
@@ -200,14 +146,6 @@ class CIPHEROutput:
         self._cipher_input = cipher_input or None
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
-
-        if (
-            options.get("VTU_files_time_interval") is not None
-            and options.get("num_VTU_files") is not None
-        ):
-            raise ValueError(
-                "Specify at most one of 'num_VTU_files' and 'VTU_files_time_interval'."
-            )
 
         for idx, i in enumerate(options["save_outputs"]):
             if i.get("number") is not None and i.get("time_interval") is not None:
@@ -282,12 +220,6 @@ class CIPHEROutput:
         inp_dat = self.get_input_YAML_data()
         grid_size = inp_dat["grid_size"]
 
-        if not self.options["use_existing_VTIs"]:
-            generate_VTI_files_from_VTU_files(
-                sampling_dimensions=grid_size,
-                paraview_exe=self.options["paraview_exe"],
-            )
-
         outfile_base = inp_dat["solution_parameters"]["outfile"]
         output_lookup = {
             i: f"{outfile_base} output.{idx}"
@@ -297,85 +229,46 @@ class CIPHEROutput:
             list(self.directory.glob(f"{outfile_base}_*.vtu")),
             key=lambda x: int(re.search(r"\d+", x.name).group()),
         )
-        vti_file_list = sorted(
-            list(self.directory.glob(f"{outfile_base}_*.vti")),
-            key=lambda x: int(re.search(r"\d+", x.name).group()),
-        )
-
-        # Move all VTU files to a sub-directory:
-        viz_dir = self.directory / "original_viz"
-
-        vtu_orig_file_list = []
-        if not viz_dir.is_dir():
-            viz_dir.mkdir()
-            for viz_file_i in vtu_file_list:
-                dst_i = viz_dir.joinpath(viz_file_i.name).with_suffix(
-                    ".viz" + viz_file_i.suffix
-                )
-                shutil.move(viz_file_i, dst_i)
-                vtu_orig_file_list.append(dst_i)
-        else:
-            vtu_orig_file_list = sorted(
-                list(viz_dir.glob("*")),
-                key=lambda x: int(re.search(r"\d+", x.name).group()),
-            )
-
-        # Copy back to the root directory VTU files that we want to keep:
-        if self.options["num_VTU_files"]:
-            viz_files_keep_idx = get_subset_indices(
-                len(vti_file_list),
-                self.options["num_VTU_files"],
-            )
-        elif self.options["VTU_files_time_interval"]:
-            viz_files_keep_idx = self._get_time_linear_subset_indices(
-                time_interval=self.options["VTU_files_time_interval"]
-            )
-        else:
-            viz_files_keep_idx = []
-
-        for i in viz_files_keep_idx:
-            viz_file_i = vtu_orig_file_list[i]
-            dst_i = (
-                self.directory.joinpath(viz_file_i.name)
-                .with_suffix("")
-                .with_suffix(".vtu")
-            )
-            shutil.copy(viz_file_i, dst_i)
-
-        if self.options["delete_VTUs"]:
-            print(f"Deleting original VTU files in directory: {viz_dir}")
-            shutil.rmtree(viz_dir)
 
         # get which files to include for each output/derived output
         outputs_keep_idx = {}
         for save_out_i in self.options["save_outputs"]:
             if "number" in save_out_i:
-                keep_idx = get_subset_indices(len(vti_file_list), save_out_i["number"])
+                keep_idx = get_subset_indices(len(vtu_file_list), save_out_i["number"])
             elif "time_interval" in save_out_i:
                 keep_idx = self._get_time_linear_subset_indices(
                     time_interval=save_out_i["time_interval"]
                 )
             else:
-                keep_idx = list(range(len(vti_file_list)))
+                keep_idx = list(range(len(vtu_file_list)))
             outputs_keep_idx[save_out_i["name"]] = keep_idx
 
         incremental_data = []
-        for file_i_idx, file_i in enumerate(vti_file_list):
+        for file_i_idx, file_i in enumerate(vtu_file_list):
+            print(f"Reading VTU file {file_i.name}...", flush=True)
             mesh = pv.get_reader(file_i).read()
-            vtu_file_name = file_i.name.replace("vti", "vtu")
+            vtu_file_name = file_i.name
+
+            img_data = pv.ImageData(dimensions=grid_size)
+            print(
+                f"Resampling VTU file {file_i.name} onto an image-data mesh...",
+                flush=True,
+            )
+            img_mesh = img_data.sample(mesh)
+
             inc_data_i = {
-                "increment": int(re.search(r"\d+", file_i.name).group()),
+                "increment": int(re.search(r"\d+", vtu_file_name).group()),
                 "time": self.cipher_stdout["outputs"][vtu_file_name],
-                "dimensions": list(mesh.dimensions),
-                "spacing": list(mesh.spacing),
-                "number_VTI_cells": mesh.number_of_cells,
-                "number_VTI_points": mesh.number_of_points,
+                "dimensions": list(img_mesh.dimensions),
+                "spacing": list(img_mesh.spacing),
+                "number_VTI_cells": img_mesh.number_of_cells,
+                "number_VTI_points": img_mesh.number_of_points,
             }
 
             standard_outputs = {}
             for name in output_lookup:
-                arr_flat = mesh.get_array(output_lookup[name])
-                arr = arr_flat.reshape(mesh.dimensions, order="F")
+                arr_flat = img_mesh.get_array(output_lookup[name])
+                arr = arr_flat.reshape(img_mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
                 standard_outputs[name] = np.array(arr)  # convert from pyvista_ndarray
@@ -400,13 +293,6 @@ class CIPHEROutput:
                         inc_data_i[out_name] = standard_outputs[out_name]
 
             incremental_data.append(inc_data_i)
-
-        if self.options["delete_VTIs"] and not self.options["use_existing_VTIs"]:
-            for file_i in vti_file_list:
-                print(f"Deleting temporary VTI file: {file_i}")
-                os.remove(file_i)
-
-        outputs_keep_idx["VTU_files"] = viz_files_keep_idx
 
         return incremental_data, outputs_keep_idx
 
