@@ -1,4 +1,12 @@
 
+<a name="v0.6.0a0"></a>
+## [v0.6.0a0](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a4...v0.6.0a0) - 2024.03.28
+
+### ✨ Features
+
+* add to/from_zarr (without CIPHERGeometry support for now
+
+
 <a name="v0.5.1a4"></a>
 ## [v0.5.1a4](https://github.com/LightForm-group/cipher-parse/compare/v0.5.1a3...v0.5.1a4) - 2024.01.08
 
