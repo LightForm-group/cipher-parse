@@ -434,7 +434,7 @@ class CIPHEROutput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def to_zarr(self, path):
+    def to_zarr(self, path, overwrite=False):
         """Save to a persistent zarr store.
 
         This does not yet save `geometries`.
@@ -455,10 +455,12 @@ class CIPHEROutput:
         out_group.create_dataset(
             name="stdout_file_str",
             data=self.stdout_file_str.splitlines(),
+            overwrite=overwrite,
         )
         out_group.create_dataset(
             name="input_YAML_file_str",
             data=self.input_YAML_file_str.splitlines(),
+            overwrite=overwrite,
         )
         inc_dat_group = out_group.create_group("incremental_data", overwrite=True)
         for idx, inc_dat_i in enumerate(self.incremental_data):
@@ -466,7 +468,12 @@ class CIPHEROutput:
             inc_dat_i_group.attrs.put({k: inc_dat_i[k] for k in INC_DATA_NON_ARRAYS})
             for k in inc_dat_i:
                 if k not in INC_DATA_NON_ARRAYS:
-                    inc_dat_i_group.create_dataset(name=k, data=inc_dat_i[k])
+                    inc_dat_i_group.create_dataset(
+                        name=k, data=inc_dat_i[k], overwrite=overwrite
+                    )
+
+        if path.endswith(".zip"):
+            out_group.store.close()
 
         return out_group
 
@@ -477,7 +484,7 @@ class CIPHEROutput:
         This does not yet load `geometries`.
 
         """
-        group = zarr.open_group(store=path)
+        group = zarr.open_group(store=path, mode="r")
         attrs = group.attrs.asdict()
         kwargs = {
             "directory": attrs["directory"],
