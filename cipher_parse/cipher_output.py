@@ -434,7 +434,7 @@ class CIPHEROutput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def to_zarr(self, path, overwrite=False):
+    def to_zarr(self, path, overwrite=False, close_store=None):
         """Save to a persistent zarr store.
 
         This does not yet save `geometries`.
@@ -472,7 +472,10 @@ class CIPHEROutput:
                         name=k, data=inc_dat_i[k], overwrite=overwrite
                     )
 
-        if path.endswith(".zip"):
+        if path.endswith(".zip") and close_store is None:
+            close_store = True
+
+        if close_store:
             out_group.store.close()
 
         return out_group
