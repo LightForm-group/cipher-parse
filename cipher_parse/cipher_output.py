@@ -246,15 +246,28 @@ class CIPHEROutput:
         incremental_data = []
         for file_i_idx, file_i in enumerate(vtu_file_list):
             print(f"Reading VTU file {file_i.name}...", flush=True)
-            mesh = pv.get_reader(file_i).read()
+            try:
+                mesh = pv.get_reader(file_i).read()
+            except Exception:
+                print(f"Failed to read VTU file {file_i.name}.", flush=True)
+                continue
             vtu_file_name = file_i.name
 
             img_data = pv.ImageData(dimensions=grid_size)
+
             print(
                 f"Resampling VTU file {file_i.name} onto an image-data mesh...",
                 flush=True,
             )
-            img_mesh = img_data.sample(mesh)
+            try:
+                img_mesh = img_data.sample(mesh)
+            except Exception:
+                print(
+                    f"Failed to re-sample VTU file {file_i.name} onto an image "
+                    f"data grid.",
+                    flush=True,
+                )
+                continue
 
             inc_data_i = {
                 "increment": int(re.search(r"\d+", vtu_file_name).group()),
@@ -267,7 +280,15 @@ class CIPHEROutput:
 
             standard_outputs = {}
             for name in output_lookup:
-                arr_flat = img_mesh.get_array(output_lookup[name])
+                try:
+                    arr_flat = img_mesh.get_array(output_lookup[name])
+                except KeyError:
+                    print(
+                        f"Failed to get array {output_lookup[name]} from file "
+                        f"{file_i.name}",
+                        flush=True,
+                    )
+                    continue
                 arr = arr_flat.reshape(img_mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
