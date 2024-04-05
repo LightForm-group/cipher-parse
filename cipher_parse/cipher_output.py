@@ -299,19 +299,33 @@ class CIPHEROutput:
                 name_i = derive_out_i["name"]
                 func = DERIVED_OUTPUTS_FUNCS[name_i]
                 func_args = {"input_data": inp_dat}
-                func_args.update(
-                    {i: standard_outputs[i] for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]}
-                )
+                try:
+                    func_args.update(
+                        {
+                            i: standard_outputs[i]
+                            for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]
+                        }
+                    )
+                except KeyError:
+                    print(
+                        f"Failed to prepare arguments for derived output function "
+                        f"{func.__name__!r}.",
+                        flush=True,
+                    )
+                    continue
                 derived_outputs[name_i] = func(**func_args)
 
             for out_name, keep_idx in outputs_keep_idx.items():
                 if file_i_idx in keep_idx:
-                    if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
-                        # a derived output:
-                        inc_data_i[out_name] = derived_outputs[out_name]
-                    else:
-                        # a standard output:
-                        inc_data_i[out_name] = standard_outputs[out_name]
+                    try:
+                        if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
+                            # a derived output:
+                            inc_data_i[out_name] = derived_outputs[out_name]
+                        else:
+                            # a standard output:
+                            inc_data_i[out_name] = standard_outputs[out_name]
+                    except KeyError:
+                        continue
 
             incremental_data.append(inc_data_i)
 
