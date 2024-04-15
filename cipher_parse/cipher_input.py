@@ -333,6 +333,7 @@ class CIPHERInput:
         num_phases=None,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         geometry = CIPHERGeometry.from_voronoi(
             num_phases=num_phases,
@@ -343,6 +344,7 @@ class CIPHERInput:
             size=size,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
         inp = cls(
@@ -366,6 +368,7 @@ class CIPHERInput:
         solution_parameters,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         return cls.from_voronoi(
             seeds=seeds,
@@ -378,6 +381,7 @@ class CIPHERInput:
             solution_parameters=solution_parameters,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
     @classmethod
@@ -393,6 +397,7 @@ class CIPHERInput:
         solution_parameters,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         return cls.from_voronoi(
             num_phases=num_phases,
@@ -405,6 +410,7 @@ class CIPHERInput:
             solution_parameters=solution_parameters,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
     @classmethod
@@ -418,6 +424,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        combine_phases=None,
     ):
         geometry = CIPHERGeometry(
             voxel_phase=voxel_phase,
@@ -425,6 +432,7 @@ class CIPHERInput:
             interfaces=interfaces,
             size=size,
             random_seed=random_seed,
+            combine_phases=combine_phases,
         )
         inp = cls(
             geometry=geometry,
@@ -445,6 +453,7 @@ class CIPHERInput:
         solution_parameters,
         container_labels=None,
         phase_type_map=None,
+        combine_phases=None,
     ):
         default_container_labels = {
             "SyntheticVolumeDataContainer": "SyntheticVolumeDataContainer",
@@ -559,6 +568,7 @@ class CIPHERInput:
             components=components,
             outputs=outputs,
             solution_parameters=solution_parameters,
+            combine_phases=combine_phases,
         )
 
     @property
