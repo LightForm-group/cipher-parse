@@ -604,14 +604,17 @@ class CIPHERInput:
 
         self.geometry._validate_interface_map()
 
-        phase_mat_str = compress_1D_array_string(self.geometry.phase_material + 1) + "\n"
-        vox_phase_str = (
-            compress_1D_array_string(self.geometry.voxel_phase.flatten(order="F") + 1)
-            + "\n"
+        phase_mat_str = compress_1D_array_string(self.geometry.phase_material + 1)
+        vox_phase_str = compress_1D_array_string(
+            self.geometry.voxel_phase.flatten(order="F") + 1
         )
-        int_str = (
-            compress_1D_array_string(self.geometry.interface_map_int.flatten() + 1) + "\n"
-        )
+        int_str = compress_1D_array_string(self.geometry.interface_map_int.flatten() + 1)
+
+        if not separate_mappings:
+            # CIPHER does not like trailing new lines in the mapping text files:
+            phase_mat_str += "\n"
+            vox_phase_str += "\n"
+            int_str += "\n"
 
         if separate_mappings:
             phase_mat_map = "phase_material_mapping.txt"
