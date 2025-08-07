@@ -333,6 +333,7 @@ class CIPHERInput:
         num_phases=None,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         geometry = CIPHERGeometry.from_voronoi(
             num_phases=num_phases,
@@ -343,6 +344,7 @@ class CIPHERInput:
             size=size,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
         inp = cls(
@@ -366,6 +368,7 @@ class CIPHERInput:
         solution_parameters,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         return cls.from_voronoi(
             seeds=seeds,
@@ -378,6 +381,7 @@ class CIPHERInput:
             solution_parameters=solution_parameters,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
     @classmethod
@@ -393,6 +397,7 @@ class CIPHERInput:
         solution_parameters,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
         return cls.from_voronoi(
             num_phases=num_phases,
@@ -405,6 +410,7 @@ class CIPHERInput:
             solution_parameters=solution_parameters,
             random_seed=random_seed,
             is_periodic=is_periodic,
+            combine_phases=combine_phases,
         )
 
     @classmethod
@@ -418,6 +424,7 @@ class CIPHERInput:
         outputs,
         solution_parameters,
         random_seed=None,
+        combine_phases=None,
     ):
         geometry = CIPHERGeometry(
             voxel_phase=voxel_phase,
@@ -425,6 +432,7 @@ class CIPHERInput:
             interfaces=interfaces,
             size=size,
             random_seed=random_seed,
+            combine_phases=combine_phases,
         )
         inp = cls(
             geometry=geometry,
@@ -445,6 +453,7 @@ class CIPHERInput:
         solution_parameters,
         container_labels=None,
         phase_type_map=None,
+        combine_phases=None,
     ):
         default_container_labels = {
             "SyntheticVolumeDataContainer": "SyntheticVolumeDataContainer",
@@ -559,6 +568,7 @@ class CIPHERInput:
             components=components,
             outputs=outputs,
             solution_parameters=solution_parameters,
+            combine_phases=combine_phases,
         )
 
     @property
@@ -604,14 +614,17 @@ class CIPHERInput:
 
         self.geometry._validate_interface_map()
 
-        phase_mat_str = compress_1D_array_string(self.geometry.phase_material + 1) + "\n"
-        vox_phase_str = (
-            compress_1D_array_string(self.geometry.voxel_phase.flatten(order="F") + 1)
-            + "\n"
+        phase_mat_str = compress_1D_array_string(self.geometry.phase_material + 1)
+        vox_phase_str = compress_1D_array_string(
+            self.geometry.voxel_phase.flatten(order="F") + 1
         )
-        int_str = (
-            compress_1D_array_string(self.geometry.interface_map_int.flatten() + 1) + "\n"
-        )
+        int_str = compress_1D_array_string(self.geometry.interface_map_int.flatten() + 1)
+
+        if not separate_mappings:
+            # CIPHER does not like trailing new lines in the mapping text files:
+            phase_mat_str += "\n"
+            vox_phase_str += "\n"
+            int_str += "\n"
 
         if separate_mappings:
             phase_mat_map = "phase_material_mapping.txt"

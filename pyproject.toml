@@ -12,27 +12,23 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.11"
-numpy = "1.21"
-h5py = "2.10.0"
+numpy = "<2"
 "ruamel.yaml" = "^0.17.21"
-damask = "^3.0.0-alpha.6"
+damask = "3.0.0-alpha.7post0"
 plotly = "^5.9.0"
 vecmaths = "^0.1.6"
 nbformat = "^5.4.0"
 itkwidgets = ">=0.25.2"
-hickle = {version = "4.0.4", optional = true}
-matflow = {version = "^0.2.26", optional = true}
 notebook = {version = "^6.5.1", optional = true}
 pandas = "^1.5.1"
 parse = "^1.19.0"
 ipywidgets = "<8.0.0"
-sqlalchemy = {version = "<2.0.0", optional = true}
-pyvista = "^0.39.0"
 trame = "^2.4.2"
 defdap = "^0.93.5"
 zarr = "^2.16.0"
+pyvista = {extras = ["all", "trame"], version = "^0.43.4"}
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pylint = "^2.12.2"
 ipykernel = "^6.6.1"
 pytest = "^6.2.5"

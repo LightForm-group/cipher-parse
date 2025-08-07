@@ -353,7 +353,7 @@ class VoxelMap:
     def get_pyvista_grid(self, include_region_ID=False):
         """Experimental!"""
 
-        grid = pv.UniformGrid()
+        grid = pv.ImageData()
 
         grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
         grid.spacing = self.spacing_3D

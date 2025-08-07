@@ -147,7 +147,7 @@ class CIPHEROutput:
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
 
-        for idx, i in enumerate(options["save_outputs"]):
+        for idx, i in enumerate(options["save_outputs"] or ()):
             if i.get("number") is not None and i.get("time_interval") is not None:
                 raise ValueError(
                     f"Specify at most one of 'number' and 'time_interval' for save "
@@ -219,6 +219,7 @@ class CIPHEROutput:
 
         inp_dat = self.get_input_YAML_data()
         grid_size = inp_dat["grid_size"]
+        grid_size_3D = grid_size if len(grid_size) == 3 else [*grid_size, 1]
 
         outfile_base = inp_dat["solution_parameters"]["outfile"]
         output_lookup = {
@@ -232,7 +233,7 @@ class CIPHEROutput:
 
         # get which files to include for each output/derived output
         outputs_keep_idx = {}
-        for save_out_i in self.options["save_outputs"]:
+        for save_out_i in self.options["save_outputs"] or ():
             if "number" in save_out_i:
                 keep_idx = get_subset_indices(len(vtu_file_list), save_out_i["number"])
             elif "time_interval" in save_out_i:
@@ -246,15 +247,28 @@ class CIPHEROutput:
         incremental_data = []
         for file_i_idx, file_i in enumerate(vtu_file_list):
             print(f"Reading VTU file {file_i.name}...", flush=True)
-            mesh = pv.get_reader(file_i).read()
+            try:
+                mesh = pv.get_reader(file_i).read()
+            except Exception:
+                print(f"Failed to read VTU file {file_i.name}.", flush=True)
+                continue
             vtu_file_name = file_i.name
 
-            img_data = pv.ImageData(dimensions=grid_size)
+            img_data = pv.ImageData(dimensions=grid_size_3D)
+
             print(
                 f"Resampling VTU file {file_i.name} onto an image-data mesh...",
                 flush=True,
             )
-            img_mesh = img_data.sample(mesh)
+            try:
+                img_mesh = img_data.sample(mesh)
+            except Exception:
+                print(
+                    f"Failed to re-sample VTU file {file_i.name} onto an image "
+                    f"data grid.",
+                    flush=True,
+                )
+                continue
 
             inc_data_i = {
                 "increment": int(re.search(r"\d+", vtu_file_name).group()),
@@ -267,30 +281,52 @@ class CIPHEROutput:
 
             standard_outputs = {}
             for name in output_lookup:
-                arr_flat = img_mesh.get_array(output_lookup[name])
+                try:
+                    arr_flat = img_mesh.get_array(output_lookup[name])
+                except KeyError:
+                    print(
+                        f"Failed to get array {output_lookup[name]} from file "
+                        f"{file_i.name}",
+                        flush=True,
+                    )
+                    continue
                 arr = arr_flat.reshape(img_mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
                 standard_outputs[name] = np.array(arr)  # convert from pyvista_ndarray
 
             derived_outputs = {}
-            for derive_out_i in self.options["derive_outputs"]:
+            for derive_out_i in self.options["derive_outputs"] or ():
                 name_i = derive_out_i["name"]
                 func = DERIVED_OUTPUTS_FUNCS[name_i]
                 func_args = {"input_data": inp_dat}
-                func_args.update(
-                    {i: standard_outputs[i] for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]}
-                )
+                try:
+                    func_args.update(
+                        {
+                            i: standard_outputs[i]
+                            for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]
+                        }
+                    )
+                except KeyError:
+                    print(
+                        f"Failed to prepare arguments for derived output function "
+                        f"{func.__name__!r}.",
+                        flush=True,
+                    )
+                    continue
                 derived_outputs[name_i] = func(**func_args)
 
             for out_name, keep_idx in outputs_keep_idx.items():
                 if file_i_idx in keep_idx:
-                    if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
-                        # a derived output:
-                        inc_data_i[out_name] = derived_outputs[out_name]
-                    else:
-                        # a standard output:
-                        inc_data_i[out_name] = standard_outputs[out_name]
+                    try:
+                        if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
+                            # a derived output:
+                            inc_data_i[out_name] = derived_outputs[out_name]
+                        else:
+                            # a standard output:
+                            inc_data_i[out_name] = standard_outputs[out_name]
+                    except KeyError:
+                        continue
 
             incremental_data.append(inc_data_i)
 
@@ -434,7 +470,7 @@ class CIPHEROutput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
-    def to_zarr(self, path):
+    def to_zarr(self, path, overwrite=False, close_store=None):
         """Save to a persistent zarr store.
 
         This does not yet save `geometries`.
@@ -455,10 +491,12 @@ class CIPHEROutput:
         out_group.create_dataset(
             name="stdout_file_str",
             data=self.stdout_file_str.splitlines(),
+            overwrite=overwrite,
         )
         out_group.create_dataset(
             name="input_YAML_file_str",
             data=self.input_YAML_file_str.splitlines(),
+            overwrite=overwrite,
         )
         inc_dat_group = out_group.create_group("incremental_data", overwrite=True)
         for idx, inc_dat_i in enumerate(self.incremental_data):
@@ -466,7 +504,15 @@ class CIPHEROutput:
             inc_dat_i_group.attrs.put({k: inc_dat_i[k] for k in INC_DATA_NON_ARRAYS})
             for k in inc_dat_i:
                 if k not in INC_DATA_NON_ARRAYS:
-                    inc_dat_i_group.create_dataset(name=k, data=inc_dat_i[k])
+                    inc_dat_i_group.create_dataset(
+                        name=k, data=inc_dat_i[k], overwrite=overwrite
+                    )
+
+        if path.endswith(".zip") and close_store is None:
+            close_store = True
+
+        if close_store:
+            out_group.store.close()
 
         return out_group
 
@@ -477,7 +523,7 @@ class CIPHEROutput:
         This does not yet load `geometries`.
 
         """
-        group = zarr.open_group(store=path)
+        group = zarr.open_group(store=path, mode="r")
         attrs = group.attrs.asdict()
         kwargs = {
             "directory": attrs["directory"],
