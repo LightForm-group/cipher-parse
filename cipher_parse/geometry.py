@@ -800,7 +800,7 @@ class CIPHERGeometry:
     def get_pyvista_grid(self):
         """Experimental!"""
 
-        grid = pv.UniformGrid()
+        grid = pv.ImageData()
 
         grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
         grid.spacing = self.size_3D / self.grid_size_3D

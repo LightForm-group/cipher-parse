@@ -147,7 +147,7 @@ class CIPHEROutput:
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
 
-        for idx, i in enumerate(options["save_outputs"]):
+        for idx, i in enumerate(options["save_outputs"] or ()):
             if i.get("number") is not None and i.get("time_interval") is not None:
                 raise ValueError(
                     f"Specify at most one of 'number' and 'time_interval' for save "
@@ -219,6 +219,7 @@ class CIPHEROutput:
 
         inp_dat = self.get_input_YAML_data()
         grid_size = inp_dat["grid_size"]
+        grid_size_3D = grid_size if len(grid_size) == 3 else [*grid_size, 1]
 
         outfile_base = inp_dat["solution_parameters"]["outfile"]
         output_lookup = {
@@ -232,7 +233,7 @@ class CIPHEROutput:
 
         # get which files to include for each output/derived output
         outputs_keep_idx = {}
-        for save_out_i in self.options["save_outputs"]:
+        for save_out_i in self.options["save_outputs"] or ():
             if "number" in save_out_i:
                 keep_idx = get_subset_indices(len(vtu_file_list), save_out_i["number"])
             elif "time_interval" in save_out_i:
@@ -253,7 +254,7 @@ class CIPHEROutput:
                 continue
             vtu_file_name = file_i.name
 
-            img_data = pv.ImageData(dimensions=grid_size)
+            img_data = pv.ImageData(dimensions=grid_size_3D)
 
             print(
                 f"Resampling VTU file {file_i.name} onto an image-data mesh...",
@@ -295,7 +296,7 @@ class CIPHEROutput:
                 standard_outputs[name] = np.array(arr)  # convert from pyvista_ndarray
 
             derived_outputs = {}
-            for derive_out_i in self.options["derive_outputs"]:
+            for derive_out_i in self.options["derive_outputs"] or ():
                 name_i = derive_out_i["name"]
                 func = DERIVED_OUTPUTS_FUNCS[name_i]
                 func_args = {"input_data": inp_dat}
