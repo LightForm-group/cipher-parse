@@ -1,4 +1,5 @@
 import random
+import warnings
 
 from damask import Orientation
 import pyvista as pv
@@ -1206,6 +1207,9 @@ class CIPHERGeometry:
 
         max_idx = 0
         for phase_type in self.phase_types:
+            if phase_type.num_phases == 0:
+                warnings.warn(f"Zero phases in phase_type: {phase_type!r}")
+                continue
             ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
             max_idx = ori_idx[-1] + 1
             phase_type.orientations = oris[ori_idx]
