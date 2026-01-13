@@ -1,4 +1,5 @@
 import random
+import warnings
 
 from damask import Orientation
 import pyvista as pv
@@ -70,7 +71,7 @@ class CIPHERGeometry:
 
         self.voxel_map = voxel_map
         self.voxel_phase = voxel_phase
-        self.seeds = np.asarray(seeds)
+        self.seeds = np.asarray(seeds) if seeds is not None else None
         self.materials = materials
         self.interfaces = interfaces
         self.random_seed = random_seed
@@ -278,7 +279,7 @@ class CIPHERGeometry:
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
-            data["seeds"] = data["seeds"].tolist()
+            data["seeds"] = data["seeds"].tolist() if data["seeds"] is not None else None
             data["voxel_phase"] = data["voxel_phase"].tolist()
             if data["misorientation_matrix"] is not None:
                 data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
@@ -299,7 +300,7 @@ class CIPHERGeometry:
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
             "size": np.array(data["size"]),
-            "seeds": np.array(data["seeds"]),
+            "seeds": np.array(data["seeds"]) if data["seeds"] is not None else None,
             "voxel_phase": np.array(data["voxel_phase"]),
             "is_periodic": data.get("is_periodic", False),
             "random_seed": data["random_seed"],
@@ -1206,6 +1207,9 @@ class CIPHERGeometry:
 
         max_idx = 0
         for phase_type in self.phase_types:
+            if phase_type.num_phases == 0:
+                warnings.warn(f"Zero phases in phase_type: {phase_type!r}")
+                continue
             ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
             max_idx = ori_idx[-1] + 1
             phase_type.orientations = oris[ori_idx]
