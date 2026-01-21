@@ -1,3 +1,6 @@
+import random
+import warnings
+
 from damask import Orientation
 import pyvista as pv
 import numpy as np
@@ -16,7 +19,11 @@ from cipher_parse.errors import (
     GeometryVoxelPhaseError,
 )
 from cipher_parse.utilities import generate_interface_energies_plot
-from cipher_parse.quats import quat_angle_between
+from cipher_parse.quats import (
+    compute_misorientation_matrix,
+    quat_angle_between,
+    compute_misorientation_matrix_damask,
+)
 
 
 class CIPHERGeometry:
@@ -35,6 +42,7 @@ class CIPHERGeometry:
         time=None,
         increment=None,
         incremental_data_idx=None,
+        combine_phases=None,
     ):
         """
         Parameters
@@ -63,7 +71,7 @@ class CIPHERGeometry:
 
         self.voxel_map = voxel_map
         self.voxel_phase = voxel_phase
-        self.seeds = np.asarray(seeds)
+        self.seeds = np.asarray(seeds) if seeds is not None else None
         self.materials = materials
         self.interfaces = interfaces
         self.random_seed = random_seed
@@ -103,6 +111,22 @@ class CIPHERGeometry:
 
         self._ensure_phase_assignment(random_seed)
 
+        if combine_phases:
+            # combine multiple phases into the same phase to reduce the computational cost
+            self.voxel_phase = self.combine_phases_per_phase_type(
+                voxel_map,
+                materials,
+                combine_phases,
+            )
+            self.voxel_map = VoxelMap(
+                region_ID=voxel_phase,
+                size=size,
+                is_periodic=is_periodic,
+                quiet=quiet,
+            )
+            all_phases = self.present_phases
+            self._num_phases = all_phases.size
+
         self._phase_material = self._get_phase_material()
         self._validate_interfaces()
         self._check_interface_phase_pairs()
@@ -126,6 +150,93 @@ class CIPHERGeometry:
         # assigned by `get_misorientation_matrix`:
         self._misorientation_matrix = None
         self._misorientation_matrix_is_degrees = None
+
+    @staticmethod
+    def combine_phases_per_phase_type(voxel_map, materials, combine_phases):
+
+        print(f"combining phases according to {combine_phases}")
+
+        voxel_phase_new = voxel_map.region_ID
+        neighbours = voxel_map.neighbour_list
+
+        for mat in materials:
+            for pt_i in mat.phase_types:
+                print(f"{pt_i.name=}")
+                max_phases_i = combine_phases.get(pt_i.name)
+                if max_phases_i:
+
+                    n_phases = pt_i.phases.size
+                    group_size = int(np.ceil(n_phases / max_phases_i))
+
+                    print(f" n_phases: {n_phases}")
+                    print(f" max_phases_i: {max_phases_i}")
+                    print(f" group_size: {group_size}")
+
+                    voxel_phase_new = np.copy(voxel_phase_new)
+
+                    reassignment = {}
+                    reassignment_inv = {}
+                    possible_IDs_idx = set(range(max_phases_i, n_phases))
+                    possible_IDs = set(pt_i.phases[list(possible_IDs_idx)])
+                    count = 0
+                    kept_IDs = []
+                    for root_ID_idx in range(int(np.ceil(n_phases / group_size))):
+
+                        root_ID = pt_i.phases[root_ID_idx]
+                        kept_IDs.append(root_ID)
+
+                        neighbours_i = set(neighbours[:, neighbours[0] == root_ID][1])
+                        possible_IDs -= {root_ID}
+                        possible_IDs_i = possible_IDs - neighbours_i
+                        shared_IDs = [root_ID]
+                        count += 1
+
+                        for _ in range(1, group_size):
+                            if count >= n_phases:
+                                break
+                            try:
+                                sampled_ID = random.sample(possible_IDs_i, 1)[0]
+                            except ValueError:
+                                print(
+                                    f"No non-neighbouring samples left for root_ID: {root_ID}."
+                                )
+                                # allow touching phase IDs within this group:
+                                possible_IDs_i = possible_IDs - set(shared_IDs)
+
+                                if possible_IDs_i:
+                                    sampled_ID = random.sample(possible_IDs_i, 1)[0]
+                                else:
+                                    raise ValueError(
+                                        f"Cannot find non-neighbouring root IDs"
+                                    ) from None
+
+                            neighbours_sampled = set(
+                                neighbours[:, neighbours[0] == sampled_ID][1]
+                            )
+                            possible_IDs_i -= neighbours_sampled
+                            possible_IDs_i -= {sampled_ID}
+                            possible_IDs -= {sampled_ID}
+                            shared_IDs.append(sampled_ID)
+                            count += 1
+
+                        for i in shared_IDs:
+                            reassignment[i] = root_ID
+                            voxel_phase_new[voxel_phase_new == i] = root_ID
+
+                        reassignment_inv[root_ID] = shared_IDs
+
+                    pt_i.phases = kept_IDs  # modify phase type phases
+
+                    # reindex phases across all materials to maintain consecutive phase IDs:
+                    voxel_phase_new_flat = voxel_phase_new.reshape(-1)
+                    uniq, inv = np.unique(voxel_phase_new_flat, return_inverse=True)
+                    reindex = dict(zip(uniq, range(len(uniq))))
+                    voxel_phase_new = inv.reshape(voxel_phase_new.shape)
+                    for mat_j in materials:
+                        for pt_j in mat_j.phase_types:
+                            pt_j.phases = np.array([reindex[i] for i in pt_j.phases])
+
+        return voxel_phase_new
 
     def __eq__(self, other):
         # Note we don't check seeds (not stored in YAML file)
@@ -168,7 +279,7 @@ class CIPHERGeometry:
         }
         if not keep_arrays:
             data["size"] = data["size"].tolist()
-            data["seeds"] = data["seeds"].tolist()
+            data["seeds"] = data["seeds"].tolist() if data["seeds"] is not None else None
             data["voxel_phase"] = data["voxel_phase"].tolist()
             if data["misorientation_matrix"] is not None:
                 data["misorientation_matrix"] = data["misorientation_matrix"].tolist()
@@ -189,7 +300,7 @@ class CIPHERGeometry:
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
             "size": np.array(data["size"]),
-            "seeds": np.array(data["seeds"]),
+            "seeds": np.array(data["seeds"]) if data["seeds"] is not None else None,
             "voxel_phase": np.array(data["voxel_phase"]),
             "is_periodic": data.get("is_periodic", False),
             "random_seed": data["random_seed"],
@@ -379,7 +490,6 @@ class CIPHERGeometry:
         the specified phases of associated material."""
 
         for i in self.interfaces:
-
             # assign materials as well as phase_types if materials not assigned to
             # interface:
             if not i.materials:
@@ -453,7 +563,7 @@ class CIPHERGeometry:
                 "Not all phases are accounted for in the phase type definitions."
             )  # TODO: test raise
 
-        # check all phase indices form a consequtive range:
+        # check all phase indices form a consecutive range:
         num_phases_range = set(np.arange(self.num_phases))
         known_phases = set(np.hstack(all_phase_idx))
         miss_phase_idx = num_phases_range - known_phases
@@ -522,7 +632,6 @@ class CIPHERGeometry:
             ints_by_phase_type_pair[int_def.phase_types].append(int_def)
 
         for pt_pair, int_defs in ints_by_phase_type_pair.items():
-
             names = [i.name for i in int_defs]
             if len(set(names)) < len(names):
                 raise ValueError(
@@ -660,7 +769,7 @@ class CIPHERGeometry:
                 f"definition: {phase_idx_int_is_nan}."
             )
 
-    def get_misorientation_matrix(self, degrees=True, overwrite=False):
+    def get_misorientation_matrix(self, degrees=True, overwrite=False, method="defdap"):
         """Given phase type definitions that include orientation lists, get the
         misorientation matrix between all pairs."""
 
@@ -670,7 +779,6 @@ class CIPHERGeometry:
             )
             return
 
-        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
         all_oris = np.ones((self.num_phases, 4)) * np.nan
         for i in self.phase_types:
             all_oris[i.phases] = i.orientations
@@ -680,23 +788,10 @@ class CIPHERGeometry:
                 "Not all orientations are accounted for in the phase type definitions."
             )
 
-        all_oris = Orientation(all_oris, family="cubic")  # TODO: generalise symmetry
-
-        misori_matrix = np.zeros((self.num_phases, self.num_phases), dtype=float)
-        for idx in range(self.num_phases):
-            print(
-                f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
-                flush=True,
-            )
-            ori_i = all_oris[idx : idx + 1]
-            other_oris = all_oris[idx + 1 :]
-            if other_oris.size:
-                disori_i = ori_i.disorientation(other_oris).as_axis_angle()[..., -1]
-                misori_matrix[idx, idx + 1 :] = disori_i
-                misori_matrix[idx + 1 :, idx] = disori_i
-
-        if degrees:
-            misori_matrix = np.rad2deg(misori_matrix)
+        if method == "defdap":
+            misori_matrix = compute_misorientation_matrix(all_oris, degrees)
+        elif method == "damask":
+            misori_matrix = compute_misorientation_matrix_damask(all_oris, degrees)
 
         self._misorientation_matrix = misori_matrix
         self._misorientation_matrix_is_degrees = degrees
@@ -706,7 +801,7 @@ class CIPHERGeometry:
     def get_pyvista_grid(self):
         """Experimental!"""
 
-        grid = pv.UniformGrid()
+        grid = pv.ImageData()
 
         grid.dimensions = self.grid_size_3D + 1  # +1 to inject values on cell data
         grid.spacing = self.size_3D / self.grid_size_3D
@@ -728,7 +823,6 @@ class CIPHERGeometry:
         volume_fractions,
         random_seed=None,
     ):
-
         print(
             "Randomly assigning phases to materials according to volume_fractions...",
             end="",
@@ -753,8 +847,8 @@ class CIPHERGeometry:
         num_phases=None,
         random_seed=None,
         is_periodic=False,
+        combine_phases=None,
     ):
-
         if sum(i is not None for i in (seeds, num_phases)) != 1:
             raise ValueError(f"Specify exactly one of `seeds` and `num_phases`")
 
@@ -783,6 +877,7 @@ class CIPHERGeometry:
             size=size,
             seeds=seeds,
             random_seed=random_seed,
+            combine_phases=combine_phases,
         )
 
     @classmethod
@@ -880,7 +975,6 @@ class CIPHERGeometry:
         include=None,
         misorientation_matrix=None,
     ):
-
         allowed_data = [
             "phase",
             "material",
@@ -939,7 +1033,6 @@ class CIPHERGeometry:
         layout_args=None,
         **kwargs,
     ):
-
         if "misorientation_matrix" in kwargs:
             slice_dat = self.get_slice(
                 slice_index,
@@ -996,7 +1089,6 @@ class CIPHERGeometry:
         pl.show()
 
     def write_VTK(self, path):
-
         grid = self.get_pyvista_grid()
 
         grid.cell_data["interface_idx"] = self.voxel_interface_idx_3D.flatten(order="F")
@@ -1115,6 +1207,9 @@ class CIPHERGeometry:
 
         max_idx = 0
         for phase_type in self.phase_types:
+            if phase_type.num_phases == 0:
+                warnings.warn(f"Zero phases in phase_type: {phase_type!r}")
+                continue
             ori_idx = np.arange(max_idx, max_idx + phase_type.num_phases)
             max_idx = ori_idx[-1] + 1
             phase_type.orientations = oris[ori_idx]

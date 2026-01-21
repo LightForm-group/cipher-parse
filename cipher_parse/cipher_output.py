@@ -1,3 +1,4 @@
+import copy
 import json
 import shutil
 from subprocess import run, PIPE
@@ -10,8 +11,9 @@ import numpy as np
 import pyvista as pv
 import pandas as pd
 import plotly.express as px
+import zarr
 
-from cipher_parse.cipher_input import CIPHERInput
+from cipher_parse.cipher_input import CIPHERInput, decompress_1D_array_string
 from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.utilities import (
     get_subset_indices,
@@ -20,7 +22,6 @@ from cipher_parse.utilities import (
 )
 from cipher_parse.derived_outputs import num_voxels_per_phase
 
-DEFAULT_PARAVIEW_EXE = "pvbatch"
 INC_DATA_NON_ARRAYS = (
     "increment",
     "time",
@@ -107,53 +108,6 @@ def parse_cipher_stdout(path_or_string, is_string=False):
     return out
 
 
-def generate_VTI_files_from_VTU_files(
-    sampling_dimensions,
-    paraview_exe=DEFAULT_PARAVIEW_EXE,
-):
-    """Generate a 'ParaView-python' script for generating VTI files from VTU files and
-    execute that script."""
-
-    script_name = "vtu2vti.py"
-    if len(sampling_dimensions) == 2:
-        sampling_dimensions += [1]
-
-    with Path(script_name).open("wt") as fp:
-        fp.write(
-            dedent(
-                f"""
-            import os
-
-            from paraview.simple import *
-
-            vtu_files = []
-            for root, dirs, files in os.walk("."):
-                for f in files:
-                    if f.endswith(".vtu"):
-                        vtu_files.append(f)
-            
-            for file_i_path in vtu_files:
-                file_i_base_name = file_i_path.split(".")[0]
-                vtu_data_i = XMLUnstructuredGridReader(
-                    FileName=[os.getcwd() + os.path.sep + file_i_path]
-                )
-                resampleToImage1 = ResampleToImage(Input=vtu_data_i)
-                resampleToImage1.SamplingDimensions = {sampling_dimensions!r}
-                SetActiveSource(resampleToImage1)
-                SaveData(file_i_base_name + ".vti", resampleToImage1)
-        """
-            )
-        )
-
-    proc = run(f"{paraview_exe} {script_name}", shell=True, stdout=PIPE, stderr=PIPE)
-    stdout = proc.stdout.decode()
-    stderr = proc.stderr.decode()
-    if stdout:
-        print(stdout)
-    if stderr:
-        print(stderr)
-
-
 class CIPHEROutput:
     """Class to hold output information from a CIPHER simulation."""
 
@@ -166,17 +120,13 @@ class CIPHEROutput:
         input_YAML_file_str,
         stdout_file_str,
         incremental_data,
+        input_map_voxel_phase=None,
+        input_map_phase_material=None,
+        input_map_interface=None,
         quiet=False,
         cipher_input=None,
     ):
-
         default_options = {
-            "paraview_exe": DEFAULT_PARAVIEW_EXE,
-            "delete_VTIs": True,
-            "delete_VTUs": False,
-            "use_existing_VTIs": False,
-            "num_VTU_files": None,
-            "VTU_files_time_interval": None,
             "derive_outputs": None,
             "save_outputs": None,
         }
@@ -185,6 +135,9 @@ class CIPHEROutput:
         self.options = {**default_options, **options}
         self.input_YAML_file_name = input_YAML_file_name
         self.input_YAML_file_str = input_YAML_file_str
+        self.input_map_voxel_phase = input_map_voxel_phase
+        self.input_map_phase_material = input_map_phase_material
+        self.input_map_interface = input_map_interface
         self.stdout_file_name = stdout_file_name
         self.stdout_file_str = stdout_file_str
         self.incremental_data = incremental_data
@@ -194,15 +147,7 @@ class CIPHEROutput:
         self._cipher_stdout = None
         self._geometries = None  # assigned by set_geometries
 
-        if (
-            options.get("VTU_files_time_interval") is not None
-            and options.get("num_VTU_files") is not None
-        ):
-            raise ValueError(
-                "Specify at most one of 'num_VTU_files' and 'VTU_files_time_interval'."
-            )
-
-        for idx, i in enumerate(options["save_outputs"]):
+        for idx, i in enumerate(options["save_outputs"] or ()):
             if i.get("number") is not None and i.get("time_interval") is not None:
                 raise ValueError(
                     f"Specify at most one of 'number' and 'time_interval' for save "
@@ -216,6 +161,9 @@ class CIPHEROutput:
         options=None,
         input_YAML_file_name="cipher_input.yaml",
         stdout_file_name="stdout.log",
+        get_voxel_phase=True,
+        get_phase_material=True,
+        get_interface=True,
     ):
         directory = Path(directory)
 
@@ -227,11 +175,26 @@ class CIPHEROutput:
         with stdout_path.open("rt") as fp:
             stdout_file_str = "".join(fp.readlines())
 
+        (
+            voxel_phase,
+            phase_material,
+            interface_map,
+        ) = CIPHERInput.get_input_maps_from_files(
+            inp_file_str=input_YAML_file_str,
+            directory=directory,
+            get_voxel_phase=get_voxel_phase,
+            get_phase_material=get_phase_material,
+            get_interface=get_interface,
+        )
+
         obj = cls(
             directory=directory,
             options=options,
             input_YAML_file_name=input_YAML_file_name,
             input_YAML_file_str=input_YAML_file_str,
+            input_map_voxel_phase=voxel_phase,
+            input_map_phase_material=phase_material,
+            input_map_interface=interface_map,
             stdout_file_name=stdout_file_name,
             stdout_file_str=stdout_file_str,
             incremental_data=None,
@@ -254,123 +217,118 @@ class CIPHEROutput:
         """Generate temporary VTI files to parse requested cipher outputs on a uniform
         grid."""
 
-        cipher_input = self.cipher_input
+        inp_dat = self.get_input_YAML_data()
+        grid_size = inp_dat["grid_size"]
+        grid_size_3D = grid_size if len(grid_size) == 3 else [*grid_size, 1]
 
-        if not self.options["use_existing_VTIs"]:
-            generate_VTI_files_from_VTU_files(
-                sampling_dimensions=cipher_input.geometry.grid_size.tolist(),
-                paraview_exe=self.options["paraview_exe"],
-            )
-
-        outfile_base = cipher_input.solution_parameters["outfile"]
+        outfile_base = inp_dat["solution_parameters"]["outfile"]
         output_lookup = {
             i: f"{outfile_base} output.{idx}"
-            for idx, i in enumerate(self.cipher_input.outputs)
+            for idx, i in enumerate(inp_dat["header"]["outputs"])
         }
         vtu_file_list = sorted(
             list(self.directory.glob(f"{outfile_base}_*.vtu")),
             key=lambda x: int(re.search(r"\d+", x.name).group()),
         )
-        vti_file_list = sorted(
-            list(self.directory.glob(f"{outfile_base}_*.vti")),
-            key=lambda x: int(re.search(r"\d+", x.name).group()),
-        )
-
-        # Move all VTU files to a sub-directory:
-        viz_dir = Path("original_viz")
-        viz_dir.mkdir()
-        vtu_orig_file_list = []
-        for viz_file_i in vtu_file_list:
-            dst_i = viz_dir.joinpath(viz_file_i.name).with_suffix(
-                ".viz" + viz_file_i.suffix
-            )
-            shutil.move(viz_file_i, dst_i)
-            vtu_orig_file_list.append(dst_i)
-
-        # Copy back to the root directory VTU files that we want to keep:
-        if self.options["num_VTU_files"]:
-            viz_files_keep_idx = get_subset_indices(
-                len(vti_file_list),
-                self.options["num_VTU_files"],
-            )
-        elif self.options["VTU_files_time_interval"]:
-            viz_files_keep_idx = self._get_time_linear_subset_indices(
-                time_interval=self.options["VTU_files_time_interval"]
-            )
-        else:
-            viz_files_keep_idx = []
-
-        for i in viz_files_keep_idx:
-            viz_file_i = vtu_orig_file_list[i]
-            dst_i = Path("").joinpath(viz_file_i.name).with_suffix("").with_suffix(".vtu")
-            shutil.copy(viz_file_i, dst_i)
-
-        if self.options["delete_VTUs"]:
-            print(f"Deleting original VTU files in directory: {viz_dir}")
-            shutil.rmtree(viz_dir)
 
         # get which files to include for each output/derived output
         outputs_keep_idx = {}
-        for save_out_i in self.options["save_outputs"]:
+        for save_out_i in self.options["save_outputs"] or ():
             if "number" in save_out_i:
-                keep_idx = get_subset_indices(len(vti_file_list), save_out_i["number"])
+                keep_idx = get_subset_indices(len(vtu_file_list), save_out_i["number"])
             elif "time_interval" in save_out_i:
                 keep_idx = self._get_time_linear_subset_indices(
                     time_interval=save_out_i["time_interval"]
                 )
             else:
-                keep_idx = list(range(len(vti_file_list)))
+                keep_idx = list(range(len(vtu_file_list)))
             outputs_keep_idx[save_out_i["name"]] = keep_idx
 
         incremental_data = []
-        for file_i_idx, file_i in enumerate(vti_file_list):
+        for file_i_idx, file_i in enumerate(vtu_file_list):
+            print(f"Reading VTU file {file_i.name}...", flush=True)
+            try:
+                mesh = pv.get_reader(file_i).read()
+            except Exception:
+                print(f"Failed to read VTU file {file_i.name}.", flush=True)
+                continue
+            vtu_file_name = file_i.name
 
-            mesh = pv.get_reader(file_i).read()
-            vtu_file_name = file_i.name.replace("vti", "vtu")
+            img_data = pv.ImageData(dimensions=grid_size_3D)
+
+            print(
+                f"Resampling VTU file {file_i.name} onto an image-data mesh...",
+                flush=True,
+            )
+            try:
+                img_mesh = img_data.sample(mesh)
+            except Exception:
+                print(
+                    f"Failed to re-sample VTU file {file_i.name} onto an image "
+                    f"data grid.",
+                    flush=True,
+                )
+                continue
+
             inc_data_i = {
-                "increment": int(re.search(r"\d+", file_i.name).group()),
+                "increment": int(re.search(r"\d+", vtu_file_name).group()),
                 "time": self.cipher_stdout["outputs"][vtu_file_name],
-                "dimensions": list(mesh.dimensions),
-                "spacing": list(mesh.spacing),
-                "number_VTI_cells": mesh.number_of_cells,
-                "number_VTI_points": mesh.number_of_points,
+                "dimensions": list(img_mesh.dimensions),
+                "spacing": list(img_mesh.spacing),
+                "number_VTI_cells": img_mesh.number_of_cells,
+                "number_VTI_points": img_mesh.number_of_points,
             }
 
             standard_outputs = {}
             for name in output_lookup:
-                arr_flat = mesh.get_array(output_lookup[name])
-                arr = arr_flat.reshape(mesh.dimensions, order="F")
+                try:
+                    arr_flat = img_mesh.get_array(output_lookup[name])
+                except KeyError:
+                    print(
+                        f"Failed to get array {output_lookup[name]} from file "
+                        f"{file_i.name}",
+                        flush=True,
+                    )
+                    continue
+                arr = arr_flat.reshape(img_mesh.dimensions, order="F")
                 if name in STANDARD_OUTPUTS_TYPES:
                     arr = arr.astype(STANDARD_OUTPUTS_TYPES[name])
-                standard_outputs[name] = arr
+                standard_outputs[name] = np.array(arr)  # convert from pyvista_ndarray
 
             derived_outputs = {}
-            for derive_out_i in self.options["derive_outputs"]:
+            for derive_out_i in self.options["derive_outputs"] or ():
                 name_i = derive_out_i["name"]
                 func = DERIVED_OUTPUTS_FUNCS[name_i]
-                func_args = {"cipher_input": cipher_input}
-                func_args.update(
-                    {i: standard_outputs[i] for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]}
-                )
+                func_args = {"input_data": inp_dat}
+                try:
+                    func_args.update(
+                        {
+                            i: standard_outputs[i]
+                            for i in DERIVED_OUTPUTS_REQUIREMENTS[name_i]
+                        }
+                    )
+                except KeyError:
+                    print(
+                        f"Failed to prepare arguments for derived output function "
+                        f"{func.__name__!r}.",
+                        flush=True,
+                    )
+                    continue
                 derived_outputs[name_i] = func(**func_args)
 
             for out_name, keep_idx in outputs_keep_idx.items():
                 if file_i_idx in keep_idx:
-                    if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
-                        # a derived output:
-                        inc_data_i[out_name] = derived_outputs[out_name]
-                    else:
-                        # a standard output:
-                        inc_data_i[out_name] = standard_outputs[out_name]
+                    try:
+                        if out_name in DERIVED_OUTPUTS_REQUIREMENTS:
+                            # a derived output:
+                            inc_data_i[out_name] = derived_outputs[out_name]
+                        else:
+                            # a standard output:
+                            inc_data_i[out_name] = standard_outputs[out_name]
+                    except KeyError:
+                        continue
 
             incremental_data.append(inc_data_i)
-
-        if self.options["delete_VTIs"] and not self.options["use_existing_VTIs"]:
-            for file_i in vti_file_list:
-                print(f"Deleting temporary VTI file: {file_i}")
-                os.remove(file_i)
-
-        outputs_keep_idx["VTU_files"] = viz_files_keep_idx
 
         return incremental_data, outputs_keep_idx
 
@@ -378,7 +336,11 @@ class CIPHEROutput:
     def cipher_input(self):
         if not self._cipher_input:
             self._cipher_input = CIPHERInput.from_input_YAML_str(
-                self.input_YAML_file_str, quiet=self.quiet
+                file_str=self.input_YAML_file_str,
+                quiet=self.quiet,
+                input_map_voxel_phase=self.input_map_voxel_phase,
+                input_map_phase_material=self.input_map_phase_material,
+                input_map_interface=self.input_map_interface,
             )
         return self._cipher_input
 
@@ -399,9 +361,21 @@ class CIPHEROutput:
     def get_input_YAML_data(self, parse_interface_map=False):
         """Get some basic input details (using the YAML input file) without initialising
         the CIPHERInput object, which can take a while depending on the grid size."""
-        return CIPHERInput.read_input_YAML_string(
-            self.input_YAML_file_str, parse_interface_map=parse_interface_map
+        dat = CIPHERInput.read_input_YAML_string(
+            file_str=self.input_YAML_file_str,
+            parse_interface_map=parse_interface_map,
         )
+        if self.input_map_voxel_phase is not None:
+            dat["voxel_phase"] = self.input_map_voxel_phase
+            dat["unique_phase_IDs"] = np.unique(self.input_map_voxel_phase)
+
+        if self.input_map_phase_material is not None:
+            dat["phase_material"] = self.input_map_phase_material
+
+        if self.input_map_interface is not None:
+            dat["interface_map"] = self.input_map_interface
+
+        return dat
 
     def to_JSON(self, keep_arrays=False):
         data = {
@@ -409,6 +383,9 @@ class CIPHEROutput:
             "options": self.options,
             "input_YAML_file_name": self.input_YAML_file_name,
             "input_YAML_file_str": self.input_YAML_file_str,
+            "input_map_voxel_phase": self.input_map_voxel_phase,
+            "input_map_phase_material": self.input_map_phase_material,
+            "input_map_interface": self.input_map_interface,
             "stdout_file_name": self.stdout_file_name,
             "stdout_file_str": self.stdout_file_str,
             "incremental_data": self.incremental_data,
@@ -418,23 +395,53 @@ class CIPHEROutput:
             for inc_idx, inc_i in enumerate(data["incremental_data"] or []):
                 for key in inc_i:
                     if key not in INC_DATA_NON_ARRAYS:
-                        as_list_val = data["incremental_data"][inc_idx][key].tolist()
+                        as_list_val = np.copy(
+                            data["incremental_data"][inc_idx][key]
+                        ).tolist()
                         data["incremental_data"][inc_idx][key] = as_list_val
+
+            if data["input_map_voxel_phase"] is not None:
+                data["input_map_voxel_phase"] = np.copy(
+                    data["input_map_voxel_phase"]
+                ).tolist()
+
+            if data["input_map_phase_material"] is not None:
+                data["input_map_phase_material"] = np.copy(
+                    data["input_map_phase_material"]
+                ).tolist()
+
+            if data["input_map_interface"] is not None:
+                data["input_map_interface"] = np.copy(
+                    data["input_map_interface"]
+                ).tolist()
 
         return data
 
     @classmethod
     def from_JSON(cls, data, cipher_input=None, quiet=True):
-
         attrs = {
             "directory": data["directory"],
             "options": data["options"],
             "input_YAML_file_name": data["input_YAML_file_name"],
             "input_YAML_file_str": data["input_YAML_file_str"],
+            "input_map_voxel_phase": data.get("input_map_voxel_phase"),
+            "input_map_phase_material": data.get("input_map_phase_material"),
+            "input_map_interface": data.get("input_map_interface"),
             "stdout_file_name": data["stdout_file_name"],
             "stdout_file_str": data["stdout_file_str"],
             "incremental_data": data["incremental_data"],
         }
+
+        if attrs["input_map_voxel_phase"]:
+            attrs["input_map_voxel_phase"] = np.array(attrs["input_map_voxel_phase"])
+
+        if attrs["input_map_phase_material"]:
+            attrs["input_map_phase_material"] = np.array(
+                attrs["input_map_phase_material"]
+            )
+
+        if attrs["input_map_interface"]:
+            attrs["input_map_interface"] = np.array(attrs["input_map_interface"])
 
         for inc_idx, inc_i in enumerate(attrs["incremental_data"] or []):
             for key, val in inc_i.items():
@@ -463,6 +470,84 @@ class CIPHEROutput:
             data = json.load(fp)
         return cls.from_JSON(data)
 
+    def to_zarr(self, path, overwrite=False, close_store=None):
+        """Save to a persistent zarr store.
+
+        This does not yet save `geometries`.
+
+        """
+        out_group = zarr.open_group(store=path)
+        out_group.attrs.put(
+            {
+                "directory": str(self.directory),
+                "options": self.options,
+                "input_YAML_file_name": self.input_YAML_file_name,
+                "input_map_voxel_phase": self.input_map_voxel_phase,
+                "input_map_phase_material": self.input_map_phase_material,
+                "input_map_interface": self.input_map_interface,
+                "stdout_file_name": self.stdout_file_name,
+            }
+        )
+        out_group.create_dataset(
+            name="stdout_file_str",
+            data=self.stdout_file_str.splitlines(),
+            overwrite=overwrite,
+        )
+        out_group.create_dataset(
+            name="input_YAML_file_str",
+            data=self.input_YAML_file_str.splitlines(),
+            overwrite=overwrite,
+        )
+        inc_dat_group = out_group.create_group("incremental_data", overwrite=True)
+        for idx, inc_dat_i in enumerate(self.incremental_data):
+            inc_dat_i_group = inc_dat_group.create_group(f"{idx}")
+            inc_dat_i_group.attrs.put({k: inc_dat_i[k] for k in INC_DATA_NON_ARRAYS})
+            for k in inc_dat_i:
+                if k not in INC_DATA_NON_ARRAYS:
+                    inc_dat_i_group.create_dataset(
+                        name=k, data=inc_dat_i[k], overwrite=overwrite
+                    )
+
+        if path.endswith(".zip") and close_store is None:
+            close_store = True
+
+        if close_store:
+            out_group.store.close()
+
+        return out_group
+
+    @classmethod
+    def from_zarr(cls, path, cipher_input=None, quiet=True):
+        """Load from a persistent zarr store.
+
+        This does not yet load `geometries`.
+
+        """
+        group = zarr.open_group(store=path, mode="r")
+        attrs = group.attrs.asdict()
+        kwargs = {
+            "directory": attrs["directory"],
+            "options": attrs["options"],
+            "input_YAML_file_name": attrs["input_YAML_file_name"],
+            "input_map_voxel_phase": attrs["input_map_voxel_phase"],
+            "input_map_phase_material": attrs["input_map_phase_material"],
+            "input_map_interface": attrs["input_map_interface"],
+            "stdout_file_name": attrs["stdout_file_name"],
+            "stdout_file_str": "\n".join(group.get("stdout_file_str")[:]),
+            "input_YAML_file_str": "\n".join(group.get("input_YAML_file_str")[:]),
+        }
+        inc_data = []
+        for inc_dat_i_group in group.get("incremental_data").values():
+            inc_dat_i_group_attrs = inc_dat_i_group.attrs.asdict()
+            inc_data_i = {k: inc_dat_i_group_attrs[k] for k in INC_DATA_NON_ARRAYS}
+            for name, dataset in inc_dat_i_group.items():
+                inc_data_i[name] = dataset[:]
+            inc_data.append(inc_data_i)
+        kwargs["incremental_data"] = inc_data
+
+        obj = cls(**kwargs, cipher_input=cipher_input, quiet=quiet)
+        return obj
+
     @classmethod
     def compare_phase_size_dist_evolution(
         cls,
@@ -480,7 +565,6 @@ class CIPHEROutput:
         label_name=None,
         layout_args=None,
     ):
-
         if len(cipher_outputs) > 1 and not (row_labels or col_labels or labels):
             raise TypeError(
                 "Multiple cipher outputs but not labels/row_labels/col_labels "
@@ -712,7 +796,6 @@ class CIPHEROutput:
                     }
                 )
             else:
-
                 if inc_idx == 0:
                     initial_bins = bins[bin_indices_i - 1]
 
@@ -831,7 +914,6 @@ class CIPHEROutput:
         bin_size=None,
         layout_args=None,
     ):
-
         all_misori_vox = []
         inc_dat_indices = []
         incs = []
@@ -1014,21 +1096,28 @@ class CIPHEROutput:
 
     def get_average_radius_evolution(self, exclude=None):
         """Get an evolution proportional to the average radius across all phases."""
-        exclude = exclude or []
-        all_phases_num_voxels = [[] for _ in range(self.geometries[0].num_phases)]
-        times = []
-        for dat_i in self.incremental_data:
-            if "num_voxels_per_phase" in dat_i:
-                for idx, i in enumerate(dat_i["num_voxels_per_phase"]):
-                    if idx in exclude:
-                        i = 0
-                    all_phases_num_voxels[idx].append(i)
-                times.append(dat_i["time"])
 
-        power = 1 / self.geometries[0].dimension
-        all_phases_prop_radius = np.array(
-            [np.power(i, power) for i in all_phases_num_voxels]
-        )
+        inp_dat = self.get_input_YAML_data()
+        num_phases = inp_dat["num_phases"]
+        dimension = len(inp_dat["grid_size"])
+        exclude = exclude or []
+
+        num_voxel_inc_idx = []
+        times = []
+        for idx, i in enumerate(self.incremental_data):
+            if "num_voxels_per_phase" in i:
+                num_voxel_inc_idx.append(idx)
+                times.append(i["time"])
+
+        all_phases_num_voxels = np.ones((num_phases, len(num_voxel_inc_idx))) * np.nan
+        for idx, inc_i_idx in enumerate(num_voxel_inc_idx):
+            num_voxels = np.copy(self.incremental_data[inc_i_idx]["num_voxels_per_phase"])
+            if exclude:
+                num_voxels[exclude] = 0
+            all_phases_num_voxels[:, idx] = num_voxels
+
+        power = 1 / dimension
+        all_phases_prop_radius = np.power(all_phases_num_voxels, power)
         all_phases_prop_radius[np.isclose(all_phases_prop_radius, 0)] = np.nan
         prop_avg_radius = np.nanmean(all_phases_prop_radius, axis=0)
 
