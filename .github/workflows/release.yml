@@ -26,6 +26,8 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: write    
     outputs:
       new_tag_name: ${{ steps.get_new_tag.outputs.new_tag_name }}
     steps:
