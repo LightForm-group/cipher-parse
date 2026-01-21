@@ -10,6 +10,11 @@ on:
     branches: [main, develop]
     types: [closed]
 
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: read
+
 jobs:
   bump-version:
     if:
@@ -25,7 +30,7 @@ jobs:
           )
         )
       )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  
     outputs:
       new_tag_name: ${{ steps.get_new_tag.outputs.new_tag_name }}
     steps:
