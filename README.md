@@ -4,7 +4,6 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/cipher-parse.svg)](https://pypi.python.org/pypi/cipher-parse) ![example workflow](https://github.com/LightForm-group/cipher-parse/actions/workflows/test.yml/badge.svg) [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/LightForm-group/cipher-parse/HEAD)
 
-
 Click the Binder link above to try it out.
 
 ## Acknowledgements
