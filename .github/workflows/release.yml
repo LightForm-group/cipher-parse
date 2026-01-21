@@ -54,7 +54,7 @@ jobs:
       - name: Manipulate tags (stable release)
         if: github.event.pull_request.base.ref == 'main'
         run:
-          | # delete all pre-release tags, set current version to the latest stable release,
+          | # delete all pre-release tags, set current version to the latest stable release
           CUR_PRE_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
           echo "CUR_PRE_TAG is: $CUR_PRE_TAG"
           echo "cur_pre_tag=$CUR_PRE_TAG" >> $GITHUB_ENV
