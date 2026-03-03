@@ -6,7 +6,7 @@ env:
   PYTHON_VERSION_RELEASE: 3.8
 
 on:
-  pull_request_target:
+  pull_request:
     branches: [main, develop]
     types: [closed]
 
