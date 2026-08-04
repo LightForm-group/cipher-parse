@@ -2,8 +2,8 @@ name: release
 concurrency: release
 
 env:
-  PYTHON_VERSION_BUMP: 3.8
-  PYTHON_VERSION_RELEASE: 3.8
+  PYTHON_VERSION_BUMP: "3.12"
+  PYTHON_VERSION_RELEASE: "3.12"
 
 on:
   pull_request:
@@ -17,8 +17,8 @@ permissions:
 
 jobs:
   bump-version:
-    if:
-      | # skip if: trying to re-run; PR is closed without merging; '[skip release]' is in the PR title; or if merging any branch other than pre_release_branch into release_branch
+    # skip if trying to re-run, PR is closed without merging, '[skip release]' is in the PR title, or if merging any branch other than pre_release_branch into release_branch
+    if: |
       (
         github.run_attempt == '1'
         && github.event.pull_request.merged
@@ -30,21 +30,23 @@ jobs:
           )
         )
       )
-    runs-on: ubuntu-latest  
+    runs-on: ubuntu-latest
     outputs:
-      new_tag_name: ${{ steps.get_new_tag.outputs.new_tag_name }}
+      new_tag: ${{ steps.new.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0 # get all history and tags
           ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.LIGHTFORM_ACTIONS_TOKEN }}
 
-      - run: |
-          git config user.name lightform-bot
-          git config user.email lightform-bot@users.noreply.github.com
+      - name: Configure git
+        uses: hpcflow/github-support/configure-git@86e0cf45f9f79069d0bc1b8a727c097a03d9012e # 0.5
+        with:
+          name: lightform-bot
+          email: lightform-bot@users.noreply.github.com
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION_BUMP }}
 
@@ -57,50 +59,58 @@ jobs:
         run: pip install commitizen
 
       - name: Manipulate tags (stable release)
+        id: pre
         if: github.event.pull_request.base.ref == 'main'
-        run:
-          | # delete all pre-release tags, set current version to the latest stable release
+        # delete all pre-release tags, set current version to the latest stable release
+        run: |
           CUR_PRE_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
           echo "CUR_PRE_TAG is: $CUR_PRE_TAG"
-          echo "cur_pre_tag=$CUR_PRE_TAG" >> $GITHUB_ENV
+          echo "tag=$CUR_PRE_TAG" >> $GITHUB_OUTPUT
           git tag -l | awk '/^(v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc).*)$/ {print $1}' | xargs git tag -d
 
       - name: Get current tag
+        id: current
         run: |
           CUR_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
           echo "CUR_TAG is: $CUR_TAG"
-          echo "cur_tag=$CUR_TAG" >> $GITHUB_ENV
+          echo "tag=$CUR_TAG" >> $GITHUB_OUTPUT
 
-      - name: Commitizen bump (pre-release) # Bump version strings (pre-release) and add a new tag; commit
+      - name: Commitizen bump (pre-release)
+        # Bump version strings (pre-release) and add a new tag; commit
         if: github.event.pull_request.base.ref == 'develop'
         run: cz bump --prerelease alpha
 
-      - name: Commitizen bump # First update version number to latest stable release, then bump to new stable release, add a new tag and commit
+      - name: Commitizen bump (stable release)
+        # First update version number to latest stable release, then bump to new stable release, add a new tag and commit
         if: github.event.pull_request.base.ref == 'main'
         run: |
           python3 -c "
           from commitizen.bump import update_version_in_files
+          from os import environ
           update_version_in_files(
-              current_version='${{ env.cur_pre_tag }}'.lstrip('v'),
-              new_version='${{ env.cur_tag }}'.lstrip('v'),
+              current_version=environ['pre_tag'].lstrip('v'),
+              new_version=environ['cur_tag'].lstrip('v'),
               files=['pyproject.toml', 'cipher_parse/_version.py'],
           )"
           cz bump
+        env:
+          pre_tag: ${{ steps.pre.outputs.tag }}
+          cur_tag: ${{ steps.current.outputs.tag }}
 
       - name: Get new tag
-        id: get_new_tag
+        id: new
         run: |
           NEW_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
           echo "NEW_TAG is: $NEW_TAG"
-          echo "new_tag=$NEW_TAG" >> $GITHUB_ENV
-          echo "::set-output name=new_tag_name::$NEW_TAG"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
       - name: Write requirements.txt for binder
         run: |
-          new_tag=${{ env.new_tag }}
           new_version="${new_tag:1}"
           echo "cipher-parse==${new_version}" > .binder/requirements.txt
           git add .binder/requirements.txt
+        env:
+          new_tag: ${{ steps.new.outputs.tag }}
 
       - name: Generate CHANGELOG (stable release)
         if: github.event.pull_request.base.ref == 'main'
@@ -116,10 +126,12 @@ jobs:
 
       - name: Push new CHANGELOG
         run: |
-          git tag -d ${{ env.new_tag }}
+          git tag -d "$new_tag"
           git commit --amend --no-edit
-          git tag ${{ env.new_tag }}
-          git push && git push origin ${{ env.new_tag }}
+          git tag "$new_tag"
+          git push && git push origin "$new_tag"
+        env:
+          new_tag: ${{ steps.new.outputs.tag }}
 
       - name: Rebase into develop branch if exists (stable release)
         if: github.event.pull_request.base.ref == 'main'
@@ -139,16 +151,20 @@ jobs:
       - name: Generate incremental CHANGELOG for GitHub release body (stable release)
         if: github.event.pull_request.base.ref == 'main'
         run: |
-          ./git-chglog --template .chglog/RELEASE.tpl.md --output CHANGELOG_increment.md ${{ env.cur_tag }}..
+          ./git-chglog --template .chglog/RELEASE.tpl.md --output CHANGELOG_increment.md "${cur_tag}.."
           cat CHANGELOG_increment.md
+        env:
+          cur_tag: ${{ steps.current.outputs.tag }}
 
       - name: Generate incremental CHANGELOG for GitHub release body (pre-release)
         if: github.event.pull_request.base.ref == 'develop'
         run: |
-          ./git-chglog --template .chglog/RELEASE.tpl.md --output CHANGELOG_increment.md ${{ env.new_tag }}
+          ./git-chglog --template .chglog/RELEASE.tpl.md --output CHANGELOG_increment.md "$new_tag"
           cat CHANGELOG_increment.md
+        env:
+          new_tag: ${{ steps.new.outputs.tag }}
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: CHANGELOG_increment
           path: CHANGELOG_increment.md
@@ -157,19 +173,19 @@ jobs:
     needs: [bump-version]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.event.pull_request.base.ref }} # otherwise we get the ref when the workflow started (missing above commit)
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION_RELEASE }}
 
       - name: Cache the virtualenv
-        uses: actions/cache@v5
+        uses: hpcflow/github-support/init-cache@86e0cf45f9f79069d0bc1b8a727c097a03d9012e # 0.5
         with:
-          path: ./.venv
-          key: venv-release-${{ hashFiles('**/poetry.lock') }}
+          name: cipher
+          version: release
 
       - name: Install poetry
         run: python -m pip install poetry
@@ -187,7 +203,7 @@ jobs:
 
       - run: mkdir release-artifacts
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release-artifacts
 
@@ -196,10 +212,10 @@ jobs:
 
       - name: Release
         id: release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           body_path: release-artifacts/CHANGELOG_increment/CHANGELOG_increment.md
-          tag_name: ${{ needs.bump-version.outputs.new_tag_name }}
+          tag_name: ${{ needs.bump-version.outputs.new_tag }}
           prerelease: ${{ github.event.pull_request.base.ref == 'develop' }}
 
       - name: Publish (to https://upload.pypi.org/legacy/)
