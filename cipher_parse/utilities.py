@@ -2,7 +2,6 @@ import json
 from importlib import resources
 import math
 from pathlib import Path
-from functools import reduce
 
 import numpy as np
 from scipy.spatial import Voronoi, Delaunay
@@ -460,8 +459,10 @@ def get_example_data_path_dream3D_3D():
 
 
 def get_subset_indices(size, subset_size):
-    """Get a list of N indices that index as uniformly as possible a sequence of a given
-    size, with the constraint that the indices must include the initial and final elements.
+    """
+    Get a list of N indices that index as uniformly as possible a sequence of a given
+    size, with the constraint that the indices must include the initial and final
+    elements.
 
     Parameters
     -----------

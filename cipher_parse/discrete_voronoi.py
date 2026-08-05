@@ -39,8 +39,8 @@ class DiscreteVoronoi(VoxelMap):
         Parameters
         ----------
         region_seeds : list or ndarray of shape (N, 2) or (N, 3)
-            Row vectors of seed positions in 2D or 3D. Must be coordinates within real-space
-            `size`.
+            Row vectors of seed positions in 2D or 3D.
+            Must be coordinates within real-space `size`.
         grid_size : list or ndarray of length 2 or 3
         size : list or ndarray of length 2 or 3, optional
             If not specified, a unit square/box is used.
@@ -133,6 +133,7 @@ class DiscreteVoronoi(VoxelMap):
         """Get random seeds that occupy unique elements on the voxel grid."""
         max_search_iter = 10_000
         idx = 0
+        counts = np.array([0])
         while idx == 0 or np.any(counts > 1):
             random_seed = random_seed + idx if random_seed else None
             seeds = cls.get_random_seeds(num_regions, size, random_seed)

@@ -1,6 +1,4 @@
 import copy
-from typing import Dict, List, Optional, Tuple, Union
-
 import numpy as np
 
 
@@ -9,12 +7,14 @@ class InterfaceDefinition:
     Attributes
     ----------
     materials :
-        Between which named materials this interface applies.  Specify this or `phase_types`.
+        Between which named materials this interface applies.
+        Specify this or `phase_types`.
     phase_types :
-        Between which named phase types this interface applies. Specify this or `materials`.
+        Between which named phase types this interface applies.
+        Specify this or `materials`.
     type_label :
-        To distinguish between multiple interfaces that all apply between the same pair of
-        materials
+        To distinguish between multiple interfaces that all apply between
+        the same pair of materials
     phase_pairs :
         List of phase pair indices that should have this interface type (for manual
         specification). Can be specified as an (N, 2) array.
@@ -22,13 +22,13 @@ class InterfaceDefinition:
 
     def __init__(
         self,
-        properties: Dict,
-        materials: Optional[Union[List[str], Tuple[str]]] = None,
-        phase_types: Optional[Union[List[str], Tuple[str]]] = None,
-        type_label: Optional[str] = None,
-        type_fraction: Optional[float] = None,
-        phase_pairs: Optional[np.ndarray] = None,
-        metadata: Optional[Dict] = None,
+        properties: dict,
+        materials: list[str] | tuple[str, ...] | None = None,
+        phase_types: list[str] | tuple[str, ...] | None = None,
+        type_label: str | None = None,
+        type_fraction: float | None = None,
+        phase_pairs: np.ndarray | None = None,
+        metadata: dict | None = None,
     ):
         self._is_phase_pairs_set = False
         self.index = None  # assigned by parent CIPHERGeometry
@@ -142,9 +142,9 @@ class InterfaceDefinition:
             for k, v in metadata.items():
                 if len(v) != self.num_phase_pairs:
                     raise ValueError(
-                        f"Item {k!r} in the `metadata` dict must have length equal to the "
-                        f"number of phase pairs ({self.num_phase_pairs}) but has length: "
-                        f"{len(v)}."
+                        f"Item {k!r} in the `metadata` dict must have length equal "
+                        f"to the number of phase pairs ({self.num_phase_pairs}) but "
+                        f"has length: {len(v)}."
                     )
         self._metadata = metadata
 

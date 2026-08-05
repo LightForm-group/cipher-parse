@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Optional, List, Union, Tuple, Dict
 
 import numpy as np
+from numpy.typing import NDArray
 import h5py
 from parse import parse
 from ruamel.yaml import YAML
@@ -14,12 +14,13 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.interface import InterfaceDefinition
 from cipher_parse.material import MaterialDefinition
-from cipher_parse.utilities import set_by_path, read_shockley, grain_boundary_mobility
+from cipher_parse.utilities import (
+    set_by_path, read_shockley, grain_boundary_mobility)
 
 
-def compress_1D_array(arr):
-    vals = []
-    nums = []
+def compress_1D_array(arr: NDArray) -> tuple[list[int], list[int]]:
+    vals: list[int] = []
+    nums: list[int] = []
     for idx, i in enumerate(arr):
         if idx == 0:
             vals.append(i)
@@ -37,7 +38,7 @@ def compress_1D_array(arr):
     return nums, vals
 
 
-def compress_1D_array_string(arr, item_delim="\n"):
+def compress_1D_array_string(arr: NDArray, item_delim="\n"):
     out = []
     for n, v in zip(*compress_1D_array(arr)):
         out.append(f"{n} of {v}" if n > 1 else f"{v}")
@@ -45,8 +46,8 @@ def compress_1D_array_string(arr, item_delim="\n"):
     return item_delim.join(out)
 
 
-def decompress_1D_array_string(arr_str, item_delim="\n"):
-    out = []
+def decompress_1D_array_string(arr_str: str, item_delim="\n") -> NDArray:
+    out: list[int] = []
     for i in arr_str.split(item_delim):
         if not i:
             continue
@@ -62,10 +63,10 @@ def decompress_1D_array_string(arr_str, item_delim="\n"):
 @dataclass
 class CIPHERInput:
     geometry: CIPHERGeometry
-    components: List
-    outputs: List
-    solution_parameters: Dict
-    quiet: Optional[bool] = False
+    components: list
+    outputs: list
+    solution_parameters: dict
+    quiet: bool | None = False
 
     def __post_init__(self):
         self._validate()
@@ -89,11 +90,13 @@ class CIPHERInput:
         )
         if not np.all(check_grid_size == np.array(self.geometry.grid_size)):
             raise ValueError(
-                f"`grid_size` (specifed: {self.geometry.grid_size}) must be equal to: "
-                f"`initblocksize` (specified: {self.solution_parameters['initblocksize']}) "
-                f"multiplied by 2 raised to the power of `initrefine` (specified: "
-                f"{self.solution_parameters['initrefine']}), calculated to be: "
-                f"{check_grid_size}."
+                f"`grid_size` "
+                f"(specifed: {self.geometry.grid_size}) "
+                f"must be equal to: `initblocksize` "
+                f"(specified: {self.solution_parameters['initblocksize']}) "
+                f"multiplied by 2 raised to the power of `initrefine` "
+                f"(specified: {self.solution_parameters['initrefine']}), "
+                f"calculated to be: {check_grid_size}."
             )
 
     def to_JSON_file(self, path):
@@ -175,7 +178,7 @@ class CIPHERInput:
         return (voxel_phase, phase_material, interface_map)
 
     @classmethod
-    def from_input_YAML_file(cls, path):
+    def from_input_YAML_file(cls, path: Path):
         """Generate a CIPHERInput object from a CIPHER input YAML file."""
 
         with Path(path).open("rt") as fp:
@@ -198,14 +201,14 @@ class CIPHERInput:
         )
 
     @classmethod
-    def read_input_YAML_file(cls, path):
+    def read_input_YAML_file(cls, path: str | Path):
         with Path(path).open("rt") as fp:
             file_str = "".join(fp.readlines())
 
         return cls.read_input_YAML_string(file_str=file_str)
 
     @staticmethod
-    def read_input_YAML_string(file_str, parse_interface_map=True):
+    def read_input_YAML_string(file_str: str, parse_interface_map=True):
         yaml = YAML(typ="safe")
         data = yaml.load(file_str)
 
@@ -256,7 +259,7 @@ class CIPHERInput:
     @classmethod
     def from_input_YAML_str(
         cls,
-        file_str,
+        file_str: str,
         input_map_voxel_phase=None,
         input_map_phase_material=None,
         input_map_interface=None,
@@ -283,7 +286,7 @@ class CIPHERInput:
             )
             for idx, (name, props) in enumerate(yaml_dat["material"].items())
         ]
-        interfaces = []
+        interfaces: list[InterfaceDefinition] = []
         for idx, (int_name, props) in enumerate(yaml_dat["interface"].items()):
             phase_pairs = np.vstack(np.where(yaml_dat["interface_map"] == idx)).T
             if phase_pairs.size:
@@ -325,14 +328,14 @@ class CIPHERInput:
         grid_size,
         size,
         materials,
-        interfaces,
+        interfaces: list[InterfaceDefinition],
         components,
         outputs,
         solution_parameters,
         seeds=None,
         num_phases=None,
         random_seed=None,
-        is_periodic=False,
+        is_periodic: bool = False,
         combine_phases=None,
     ):
         geometry = CIPHERGeometry.from_voronoi(
@@ -362,7 +365,7 @@ class CIPHERInput:
         grid_size,
         size,
         materials,
-        interfaces,
+        interfaces: list[InterfaceDefinition],
         components,
         outputs,
         solution_parameters,
@@ -391,7 +394,7 @@ class CIPHERInput:
         grid_size,
         size,
         materials,
-        interfaces,
+        interfaces: list[InterfaceDefinition],
         components,
         outputs,
         solution_parameters,
@@ -419,7 +422,7 @@ class CIPHERInput:
         voxel_phase,
         size,
         materials,
-        interfaces,
+        interfaces: list[InterfaceDefinition],
         components,
         outputs,
         solution_parameters,
@@ -447,7 +450,7 @@ class CIPHERInput:
         cls,
         path,
         materials,
-        interfaces,
+        interfaces: list[InterfaceDefinition],
         components,
         outputs,
         solution_parameters,
@@ -576,15 +579,15 @@ class CIPHERInput:
         return self.geometry.materials
 
     @property
-    def material_properties(self):
+    def material_properties(self) -> dict:
         return self.geometry.material_properties
 
     @property
-    def interfaces(self):
+    def interfaces(self) -> list[InterfaceDefinition]:
         return self.geometry.interfaces
 
     @property
-    def interface_names(self):
+    def interface_names(self) -> list[str]:
         return self.geometry.interface_names
 
     def get_header(self):
@@ -599,10 +602,10 @@ class CIPHERInput:
         }
         return out
 
-    def get_interfaces(self):
+    def get_interfaces(self) -> dict[str, dict]:
         return {i.name: i.properties for i in self.geometry.interfaces}
 
-    def write_yaml(self, path, separate_mappings=False):
+    def write_yaml(self, path: str, separate_mappings: bool = False) -> Path:
         """Write the CIPHER input YAML file.
 
         Parameters
@@ -659,22 +662,22 @@ class CIPHERInput:
         }
 
         yaml = YAML()
-        path = Path(path)
-        with path.open("wt", newline="\n") as fp:
+        path_ = Path(path)
+        with path_.open("wt", newline="\n") as fp:
             yaml.dump(cipher_input_data, fp)
 
-        return path
+        return path_
 
     def bin_interfaces_by_misorientation_angle(
         self,
-        base_interface_name,
+        base_interface_name: str,
         theta_max,
         energy_range=None,
         mobility_range=None,
-        n=4,
-        B=5,
-        bin_width=5,
-        degrees=True,
+        n: int = 4,
+        B: int = 5,
+        bin_width: int = 5,
+        degrees: bool = True,
         **kwargs,
     ):
         if energy_range is None and mobility_range is None:
@@ -795,8 +798,8 @@ class CIPHERInput:
 
     def apply_interface_property(
         self,
-        base_interface_name,
-        property_name,
+        base_interface_name: str,
+        property_name: str | list[str] | tuple[str, ...],
         property_values,
         additional_metadata=None,
         bin_edges=None,
@@ -818,8 +821,10 @@ class CIPHERInput:
 
         """
 
-        if not isinstance(property_name, list):
-            property_name = [property_name]
+        if isinstance(property_name, list):
+            property_name = tuple(property_name)
+        elif isinstance(property_name, str):
+            property_name = (property_name, )
 
         if not isinstance(property_values, list):
             property_values = [property_values]
@@ -843,8 +848,9 @@ class CIPHERInput:
                     else:
                         value = bin_i
                     print(
-                        f"Adding {pp_idx_i.size!r} phase pair(s) to {property_name!r} bin "
-                        f"{idx + 1} with edge value: {bin_i!r} and centre: {value!r}."
+                        f"Adding {pp_idx_i.size!r} phase pair(s) to "
+                        f"{property_name!r} bin {idx + 1} with edge "
+                        f"value: {bin_i!r} and centre: {value!r}."
                     )
                     new_interfaces_data.append(
                         {
@@ -879,9 +885,10 @@ class CIPHERInput:
                     )
                 )
                 raise RuntimeError(
-                    f"Not all phase pairs have been added to a property value bin. The "
-                    f"following {len(missing_dat)}/{phase_pairs.shape[1]} phase pairs (and "
-                    f"property values) are missing: {missing_dat}."
+                    f"Not all phase pairs have been added to a property "
+                    f"value bin. The following "
+                    f"{len(missing_dat)}/{phase_pairs.shape[1]} "
+                    f"phase pairs (and property values) are missing: {missing_dat}."
                 )
         else:
             print(
@@ -900,7 +907,7 @@ class CIPHERInput:
         for idx, i in enumerate(new_interfaces_data):
             props = copy.deepcopy(base_defn.properties)
             for name, val in zip(property_name, i["values"]):
-                new_value = val.item()  #  convert from numpy to native
+                new_value = val.item()  # convert from numpy to native
                 set_by_path(root=props, path=name, value=new_value)
 
             new_type_lab = str(idx)

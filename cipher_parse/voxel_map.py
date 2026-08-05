@@ -1,10 +1,14 @@
 import numpy as np
+from numpy.typing import NDArray
 import pyvista as pv
 from cipher_parse.utilities import get_array_edge_mask
 
 
 class VoxelMap:
-    def __init__(self, region_ID, size, is_periodic, region_data=None, quiet=False):
+    def __init__(
+        self, region_ID: NDArray, size: list[int] | tuple[int, ...],
+        is_periodic: bool, region_data: dict | None = None, quiet: bool = False
+    ):
         """
         Parameters
         ---------
@@ -27,7 +31,7 @@ class VoxelMap:
             if v.shape[0] != self.num_regions:
                 raise ValueError(
                     f"Region data must be the same length as the number of regions "
-                    f"({self.num_regions}), but specified lenght for {k!r} was "
+                    f"({self.num_regions}), but specified length for {k!r} was "
                     f"{v.shape[0]}."
                 )
             self.region_data[k] = v
@@ -35,52 +39,52 @@ class VoxelMap:
         self._coordinates = None  # assigned by `get_coordinates`
 
     @property
-    def region_ID_flat(self):
+    def region_ID_flat(self) -> NDArray:
         return self.region_ID.reshape(-1)
 
     @property
-    def dimension(self):
+    def dimension(self) -> int:
         return self.region_ID.ndim
 
     @property
-    def grid_size(self):
+    def grid_size(self) -> NDArray:
         return np.array(self.region_ID.shape)
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, ...]:
         return tuple(self.grid_size)
 
     @property
-    def spacing(self):
+    def spacing(self) -> NDArray:
         return self.size / self.grid_size
 
     @property
-    def spacing_3D(self):
+    def spacing_3D(self) -> NDArray:
         return self.size_3D / self.grid_size_3D
 
     @property
-    def num_voxels(self):
-        return np.product(self.grid_size)
+    def num_voxels(self) -> int:
+        return np.prod(self.grid_size)
 
     @property
-    def coordinates(self):
+    def coordinates(self) -> NDArray:
         if self._coordinates is None:
             self._coordinates = self._get_coordinates()
         return self._coordinates
 
-    def _get_coordinates(self):
+    def _get_coordinates(self) -> NDArray:
         mg_args = [np.arange(i) * j / i for i, j in zip(self.grid_size, self.size)]
         coords = np.concatenate([i[..., None] for i in np.meshgrid(*mg_args)], axis=-1)
         return coords
 
-    def generate_voxel_mask(self):
+    def generate_voxel_mask(self) -> NDArray:
         voxel_mask = np.zeros(self.shape, dtype=int)
         return voxel_mask.astype(bool)
 
-    def get_num_regions(self):
+    def get_num_regions(self) -> int:
         return np.unique(self.region_ID).size
 
-    def get_neighbour_region(self, dimension: int, direction: int):
+    def get_neighbour_region(self, dimension: int, direction: int) -> NDArray:
         """
         Parameters
         ----------
@@ -105,49 +109,49 @@ class VoxelMap:
         return region
 
     @property
-    def region_ID_above(self):
+    def region_ID_above(self) -> NDArray:
         return self.get_neighbour_region(self.dimension - 2, 1)
 
     @property
-    def region_ID_below(self):
+    def region_ID_below(self) -> NDArray:
         return self.get_neighbour_region(self.dimension - 2, -1)
 
     @property
-    def region_ID_left(self):
+    def region_ID_left(self) -> NDArray:
         return self.get_neighbour_region(self.dimension - 1, 1)
 
     @property
-    def region_ID_right(self):
+    def region_ID_right(self) -> NDArray:
         return self.get_neighbour_region(self.dimension - 1, -1)
 
     @property
-    def region_ID_in(self):
+    def region_ID_in(self) -> NDArray:
         if self.dimension != 3:
             raise AttributeError("No `region_ID_in` for 2D geometry.")
         else:
             return self.get_neighbour_region(0, 1)
 
     @property
-    def region_ID_out(self):
+    def region_ID_out(self) -> NDArray:
         if self.dimension != 3:
             raise AttributeError("No `region_ID_out` for 2D geometry.")
         else:
             return self.get_neighbour_region(0, -1)
 
     @property
-    def region_ID_diff_above(self):
+    def region_ID_diff_above(self) -> NDArray:
         return self.region_ID - self.region_ID_above != 0
 
     @property
-    def region_ID_diff_below(self):
+    def region_ID_diff_below(self) -> NDArray:
         return self.region_ID - self.region_ID_below != 0
 
     @property
-    def region_ID_diff_left(self):
+    def region_ID_diff_left(self) -> NDArray:
         return self.region_ID - self.region_ID_left != 0
 
     @property
-    def region_ID_diff_right(self):
+    def region_ID_diff_right(self) -> NDArray:
         return self.region_ID - self.region_ID_right != 0
 
     @property
@@ -155,23 +159,23 @@ class VoxelMap:
         return self.region_ID - self.region_ID_in != 0
 
     @property
-    def region_ID_diff_out(self):
+    def region_ID_diff_out(self) -> NDArray:
         return self.region_ID - self.region_ID_out != 0
 
     @property
-    def region_ID_diff_horz(self):
+    def region_ID_diff_horz(self) -> NDArray:
         return np.logical_or(self.region_ID_diff_left, self.region_ID_diff_right)
 
     @property
-    def region_ID_diff_vert(self):
+    def region_ID_diff_vert(self) -> NDArray:
         return np.logical_or(self.region_ID_diff_above, self.region_ID_diff_below)
 
     @property
-    def region_ID_diff_depth(self):
+    def region_ID_diff_depth(self) -> NDArray:
         return np.logical_or(self.region_ID_diff_in, self.region_ID_diff_out)
 
     @property
-    def region_ID_bulk(self):
+    def region_ID_bulk(self) -> NDArray:
         out = np.logical_and(
             np.logical_not(self.region_ID_diff_horz),
             np.logical_not(self.region_ID_diff_vert),
@@ -181,7 +185,7 @@ class VoxelMap:
 
         return out
 
-    def get_region_boundary_voxels(self, r1: int, r2: int):
+    def get_region_boundary_voxels(self, r1: int, r2: int) -> NDArray:
         r1_vox = (self.region_ID == r1).astype(int)
         r2_vox = (self.region_ID == r2).astype(int)
         overlap = np.concatenate(
@@ -210,7 +214,7 @@ class VoxelMap:
         boundary_vox = np.sum(overlap, axis=0) > 0
         return boundary_vox
 
-    def get_neighbour_voxels(self, quiet=False):
+    def get_neighbour_voxels(self, quiet: bool = False) -> NDArray:
         if not quiet:
             print("Finding neighbouring voxels...", end="")
         interface_voxels = np.copy(self.region_ID)
@@ -219,13 +223,13 @@ class VoxelMap:
             print("done!")
         return interface_voxels
 
-    def get_interface_voxels(self):
+    def get_interface_voxels(self) -> NDArray:
         interface_voxels = np.copy(self.region_ID)
         interface_voxels[self.region_ID_bulk] = -1
         interface_voxels[interface_voxels != -1] = 0
         return interface_voxels
 
-    def get_neighbour_list(self, quiet=False):
+    def get_neighbour_list(self, quiet: bool = False) -> NDArray:
         """Get the pairs of regions that are neighbours"""
         if not quiet:
             print("Finding neighbour list...", end="")
@@ -274,7 +278,7 @@ class VoxelMap:
 
         return neighbours
 
-    def get_interface_idx(self, interface_map, as_3D=False):
+    def get_interface_idx(self, interface_map: NDArray, as_3D: bool = False) -> NDArray:
         interface_idx_above_flat = interface_map[
             self.region_ID_flat, self.region_ID_above.reshape(-1)
         ]
@@ -337,20 +341,20 @@ class VoxelMap:
             return interface_idx_all
 
     @property
-    def grid_size_3D(self):
+    def grid_size_3D(self) -> NDArray:
         if self.dimension == 2:
             return np.hstack([self.grid_size[::-1], 1])
         else:
             return np.asarray(self.grid_size)
 
     @property
-    def size_3D(self):
+    def size_3D(self) -> NDArray:
         if self.dimension == 2:
             return np.hstack([self.size[::-1], self.size[0] / self.grid_size[0]])
         else:
             return np.asarray(self.size)
 
-    def get_pyvista_grid(self, include_region_ID=False):
+    def get_pyvista_grid(self, include_region_ID: bool = False):
         """Experimental!"""
 
         grid = pv.ImageData()

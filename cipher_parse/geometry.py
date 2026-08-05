@@ -4,6 +4,7 @@ import warnings
 from damask import Orientation
 import pyvista as pv
 import numpy as np
+from numpy.typing import NDArray
 import plotly.express as px
 
 from cipher_parse.material import MaterialDefinition
@@ -29,16 +30,16 @@ from cipher_parse.quats import (
 class CIPHERGeometry:
     def __init__(
         self,
-        materials,
-        interfaces,
+        materials: list[MaterialDefinition],
+        interfaces: list[InterfaceDefinition],
         size,
-        seeds=None,
-        voxel_phase=None,
-        voxel_map=None,
-        is_periodic=False,
-        random_seed=None,
-        allow_missing_phases=False,
-        quiet=False,
+        seeds: list | None = None,
+        voxel_phase: NDArray | None = None,
+        voxel_map: VoxelMap | None = None,
+        is_periodic: bool = False,
+        random_seed: int | None = None,
+        allow_missing_phases: bool = False,
+        quiet: bool = False,
         time=None,
         increment=None,
         incremental_data_idx=None,
@@ -54,7 +55,7 @@ class CIPHERGeometry:
         """
 
         if sum(i is not None for i in (voxel_phase, voxel_map)) != 1:
-            raise ValueError(f"Specify exactly one of `voxel_phase` and `voxel_map`")
+            raise ValueError("Specify exactly one of `voxel_phase` and `voxel_map`")
         if voxel_map is None:
             voxel_map = VoxelMap(
                 region_ID=voxel_phase,
@@ -99,8 +100,8 @@ class CIPHERGeometry:
         if not allow_missing_phases:
             if not np.all(all_phases == np.arange(self.num_phases)):
                 raise GeometryVoxelPhaseError(
-                    "`voxel_phase` must be an array of consecutive integers starting from "
-                    "zero."
+                    "`voxel_phase` must be an array of consecutive integers starting "
+                    "from zero."
                 )
 
         if len(set(self.material_names)) < self.num_materials:
@@ -152,7 +153,10 @@ class CIPHERGeometry:
         self._misorientation_matrix_is_degrees = None
 
     @staticmethod
-    def combine_phases_per_phase_type(voxel_map, materials, combine_phases):
+    def combine_phases_per_phase_type(
+        voxel_map: VoxelMap, materials: list[MaterialDefinition],
+        combine_phases: dict
+    ) -> NDArray:
 
         print(f"combining phases according to {combine_phases}")
 
@@ -198,7 +202,8 @@ class CIPHERGeometry:
                                 sampled_ID = random.sample(possible_IDs_i, 1)[0]
                             except ValueError:
                                 print(
-                                    f"No non-neighbouring samples left for root_ID: {root_ID}."
+                                    f"No non-neighbouring samples left for "
+                                    f"root_ID: {root_ID}."
                                 )
                                 # allow touching phase IDs within this group:
                                 possible_IDs_i = possible_IDs - set(shared_IDs)
@@ -207,7 +212,7 @@ class CIPHERGeometry:
                                     sampled_ID = random.sample(possible_IDs_i, 1)[0]
                                 else:
                                     raise ValueError(
-                                        f"Cannot find non-neighbouring root IDs"
+                                        "Cannot find non-neighbouring root IDs"
                                     ) from None
 
                             neighbours_sampled = set(
@@ -227,7 +232,8 @@ class CIPHERGeometry:
 
                     pt_i.phases = kept_IDs  # modify phase type phases
 
-                    # reindex phases across all materials to maintain consecutive phase IDs:
+                    # reindex phases across all materials to maintain consecutive
+                    # phase IDs:
                     voxel_phase_new_flat = voxel_phase_new.reshape(-1)
                     uniq, inv = np.unique(voxel_phase_new_flat, return_inverse=True)
                     reindex = dict(zip(uniq, range(len(uniq))))
@@ -256,11 +262,11 @@ class CIPHERGeometry:
         int_names = self.interface_names
         if len(set(int_names)) < len(int_names):
             raise ValueError(
-                f"Multiple interfaces have the same name (i.e. "
-                f"phase-type-pair and type-label combination)!"
+                "Multiple interfaces have the same name (i.e. "
+                "phase-type-pair and type-label combination)!"
             )
 
-    def to_JSON(self, keep_arrays=False):
+    def to_JSON(self, keep_arrays: bool = False) -> dict:
         data = {
             "materials": [i.to_JSON(keep_arrays) for i in self.materials],
             "interfaces": [i.to_JSON(keep_arrays) for i in self.interfaces],
@@ -295,7 +301,7 @@ class CIPHERGeometry:
         return data
 
     @classmethod
-    def from_JSON(cls, data, quiet=True):
+    def from_JSON(cls, data: dict, quiet: bool = True):
         data_init = {
             "materials": [MaterialDefinition.from_JSON(i) for i in data["materials"]],
             "interfaces": [InterfaceDefinition.from_JSON(i) for i in data["interfaces"]],
@@ -340,32 +346,32 @@ class CIPHERGeometry:
         return np.concatenate(phases)
 
     @property
-    def interfaces(self):
+    def interfaces(self) -> list[InterfaceDefinition]:
         return self._interfaces
 
     @property
-    def is_periodic(self):
+    def is_periodic(self) -> bool:
         return self._is_periodic
 
     @interfaces.setter
-    def interfaces(self, interfaces):
+    def interfaces(self, interfaces: list[InterfaceDefinition]):
         self._interfaces = interfaces
         self._validate_interfaces()
 
     @property
-    def misorientation_matrix(self):
+    def misorientation_matrix(self) -> NDArray | None:
         return self._misorientation_matrix
 
     @property
     def misorientation_matrix_is_degrees(self):
         return self._misorientation_matrix_is_degrees
 
-    def get_phase_voxels(self):
+    def get_phase_voxels(self) -> list:
         if self._phase_voxels is None:
             self._calculate_phase_voxels()
         return self._phase_voxels
 
-    def get_phase_num_voxels(self):
+    def get_phase_num_voxels(self) -> NDArray:
         if self._phase_num_voxels is None:
             self._calculate_phase_num_voxels()
         return self._phase_num_voxels
@@ -425,7 +431,7 @@ class CIPHERGeometry:
         calc_count = 0
         report_each_pc = 5
         num_iter_per_report = np.ceil(tot_num_calcs * report_each_pc / 100)
-        print(f"Identifying grain boundaries...", flush=True)
+        print("Identifying grain boundaries...", flush=True)
         for int_idx, interface in enumerate(self.interfaces):
             for phase_pair in interface.phase_pairs:
                 calc_count += 1
@@ -461,7 +467,7 @@ class CIPHERGeometry:
                         "voxel_coordinates": vox_coords,
                         "centroid": GB_centroid,
                     }
-        print(f"Finished grain boundaries.", flush=True)
+        print("Finished grain boundaries.", flush=True)
         self._grain_boundaries = grain_boundaries
 
     def _calculate_grain_boundary_centroids(self):
@@ -469,17 +475,17 @@ class CIPHERGeometry:
             [i["centroid"][None] for i in self.get_grain_boundaries().values()], axis=0
         )
 
-    def _ensure_phase_assignment(self, random_seed):
+    def _ensure_phase_assignment(self, random_seed: int | None):
         is_mat_phases = [i.phases is not None for i in self.materials]
         is_mat_vol_frac = [i is not None for i in self.target_material_volume_fractions]
         is_mixed = any(is_mat_phases) and any(is_mat_vol_frac)
 
         if is_mixed or (any(is_mat_phases) and not all(is_mat_phases)):
             raise GeometryMissingPhaseAssignmentError(
-                f"Specify either: all phases explicitly (via the material definition "
-                f"`phases`, or the constituent phase type definition `phases`), or "
-                f"specify zero or more target volume fractions for the material "
-                f"definitions."
+                "Specify either: all phases explicitly (via the material definition "
+                "`phases`, or the constituent phase type definition `phases`), or "
+                "specify zero or more target volume fractions for the material "
+                "definitions."
             )
 
         if not any(is_mat_phases):
@@ -511,7 +517,8 @@ class CIPHERGeometry:
                         f"{i.materials[0]!r} and {i.materials[1]!r}."
                     )  # TODO: test raise
 
-    def _assign_phases_by_volume_fractions(self, is_mat_vol_frac, random_seed):
+    def _assign_phases_by_volume_fractions(
+            self, is_mat_vol_frac, random_seed: int | None):
         # Assign via target volume fractions.
         num_unassigned_vol = self.num_materials - sum(is_mat_vol_frac)
         assigned_vol = sum(i or 0.0 for i in self.target_material_volume_fractions)
@@ -594,8 +601,10 @@ class CIPHERGeometry:
         return phase_ori
 
     def get_interface_map_indices(self, phase_type_A, phase_type_B):
-        """Get an array of integer indices that index the (upper triangle of the) 2D
-        symmetric interface map array, corresponding to a given material pair."""
+        """
+        Get an array of integer indices that index the (upper triangle of the) 2D
+        symmetric interface map array, corresponding to a given material pair.
+        """
 
         # First get phase indices belonging to the two phase types:
         ptypes = {i.name: i for i in self.phase_types}
@@ -615,8 +624,10 @@ class CIPHERGeometry:
         return map_idx_non_trivial
 
     def _get_interface_map(self, upper_tri_only=False, quiet=False):
-        """Generate the num_phases by num_phases symmetric matrix that maps each phase-pair
-        to an interface index."""
+        """
+        Generate the num_phases by num_phases symmetric matrix that maps each phase-pair
+        to an interface index.
+        """
 
         if not quiet:
             print("Finding interface map matrix...", end="")
@@ -646,18 +657,20 @@ class CIPHERGeometry:
             if any_frac_set:
                 if any_manual_set:
                     raise ValueError(
-                        f"For interface {pt_pair}, specify phase pairs manually for all "
-                        f"defined interfaces using `phase_pairs`, or specify `type_fraction`"
-                        f"for all defined interfaces. You cannot mix them."
+                        f"For interface {pt_pair}, specify phase pairs manually for "
+                        f"all defined interfaces using `phase_pairs`, or specify "
+                        f"`type_fraction` for all defined interfaces. "
+                        f"You cannot mix them."
                     )
 
             all_phase_pairs = self.get_interface_map_indices(*pt_pair).T
             if any_manual_set:
                 if not all_manual_set:
                     raise ValueError(
-                        f"For interface {pt_pair}, specify phase pairs manually for all "
-                        f"defined interfaces using `phase_pairs`, or specify `type_fraction`"
-                        f"for all defined interfaces. You cannot mix them."
+                        f"For interface {pt_pair}, specify phase pairs manually for "
+                        f"all defined interfaces using `phase_pairs`, or specify "
+                        f"`type_fraction` for all defined interfaces. "
+                        f"You cannot mix them."
                     )
 
                 # check that given phase_pairs combine to the set of all phase_pairs
@@ -808,7 +821,8 @@ class CIPHERGeometry:
         return grid
 
     @staticmethod
-    def get_unique_random_seeds(num_phases, size, grid_size, random_seed=None):
+    def get_unique_random_seeds(
+            num_phases: int, size, grid_size, random_seed: int | None = None) -> NDArray:
         return DiscreteVoronoi.get_unique_random_seeds(
             num_regions=num_phases,
             size=size,
@@ -839,18 +853,18 @@ class CIPHERGeometry:
     @classmethod
     def from_voronoi(
         cls,
-        interfaces,
-        materials,
+        interfaces: list[InterfaceDefinition],
+        materials: list[MaterialDefinition],
         grid_size,
         size,
-        seeds=None,
+        seeds: list | None = None,
         num_phases=None,
-        random_seed=None,
+        random_seed: int | None = None,
         is_periodic=False,
         combine_phases=None,
     ):
         if sum(i is not None for i in (seeds, num_phases)) != 1:
-            raise ValueError(f"Specify exactly one of `seeds` and `num_phases`")
+            raise ValueError("Specify exactly one of `seeds` and `num_phases`")
 
         if seeds is None:
             vor_map = DiscreteVoronoi.from_random(
@@ -883,12 +897,12 @@ class CIPHERGeometry:
     @classmethod
     def from_seed_voronoi(
         cls,
-        seeds,
-        interfaces,
-        materials,
+        seeds: list,
+        interfaces: list[InterfaceDefinition],
+        materials: list[MaterialDefinition],
         grid_size,
         size,
-        random_seed=None,
+        random_seed: int | None = None,
         is_periodic=False,
     ):
         return cls.from_voronoi(
@@ -905,11 +919,11 @@ class CIPHERGeometry:
     def from_random_voronoi(
         cls,
         num_phases,
-        interfaces,
-        materials,
+        interfaces: list[InterfaceDefinition],
+        materials: list[MaterialDefinition],
         grid_size,
         size,
-        random_seed=None,
+        random_seed: int | None = None,
         is_periodic=False,
     ):
         return cls.from_voronoi(
@@ -1275,9 +1289,11 @@ class CIPHERGeometry:
         else:
             return vox_IPF
 
-    def remove_interface(self, interface_name):
-        """Remove an interface from the geometry. This will invalidate the geometry if
-        the specified interface is referred by any phase-pairs."""
+    def remove_interface(self, interface_name: str):
+        """
+        Remove an interface from the geometry. This will invalidate the geometry if
+        the specified interface is referred by any phase-pairs.
+        """
 
         idx = self.interface_names.index(interface_name)
         interface = self.interfaces.pop(idx)
@@ -1377,8 +1393,8 @@ class CIPHERGeometry:
                 x.append(m_i)
                 color.append(bin_idx)
                 hover.append(
-                    f"({bin_i['phase_pairs'][m_i_idx, 0], bin_i['phase_pairs'][m_i_idx, 1]})"
-                )
+                    f"({bin_i['phase_pairs'][m_i_idx, 0],
+                        bin_i['phase_pairs'][m_i_idx, 1]})")
 
         fig.add_scatter(
             x=x,
