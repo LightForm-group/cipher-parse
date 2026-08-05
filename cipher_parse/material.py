@@ -1,5 +1,5 @@
 import numpy as np
-
+from numpy.typing import NDArray
 from cipher_parse.errors import (
     MaterialPhaseTypeFractionError,
     MaterialPhaseTypeLabelError,
@@ -115,8 +115,8 @@ class MaterialDefinition:
             for i in phase_types or []:
                 if i.phases is not None:
                     raise ValueError(
-                        f"Cannot specify `phases` in any of the phase type definitions if "
-                        f"`phases` is also specified in the material definition."
+                        "Cannot specify `phases` in any of the phase type definitions "
+                        "if `phases` is also specified in the material definition."
                     )  # TODO: test raise
         else:
             if phase_types:
@@ -134,8 +134,8 @@ class MaterialDefinition:
             pt_labels = [i.type_label for i in phase_types]
             if len(set(pt_labels)) < len(pt_labels):
                 raise MaterialPhaseTypeLabelError(
-                    f"Phase types belonging to the same material ({self.name!r}) must have "
-                    f"distinct `type_label`s."
+                    f"Phase types belonging to the same material ({self.name!r}) must "
+                    f"have distinct `type_label`s."
                 )
 
         self.phase_types = phase_types
@@ -217,7 +217,7 @@ class MaterialDefinition:
         return [i.target_type_fraction for i in self.phase_types]
 
     @property
-    def phases(self):
+    def phases(self) -> NDArray | None:
         try:
             return np.concatenate([i.phases for i in self.phase_types])
         except ValueError:
@@ -240,7 +240,9 @@ class MaterialDefinition:
         return np.array(phase_type_fractions)
 
     def assign_phases(self, phases, random_seed=None):
-        """Assign given phase indices to phase types according to target_type_fractions."""
+        """
+        Assign given phase indices to phase types according to target_type_fractions.
+        """
 
         phases = np.asarray(phases)
 
@@ -260,8 +262,8 @@ class MaterialDefinition:
                 num_phases_i = len(phase_idx_i)
                 if num_oris_i < num_phases_i:
                     raise ValueError(
-                        f"Insufficient number of orientations ({num_oris_i}) for phase type "
-                        f"{type_idx} with {num_phases_i} phases."
+                        f"Insufficient number of orientations ({num_oris_i}) for "
+                        f"phase type {type_idx} with {num_phases_i} phases."
                     )
                 elif num_oris_i > num_phases_i:
                     # select a subset randomly:

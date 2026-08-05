@@ -69,7 +69,7 @@ def quat_multiply(q1, q2, P=1):
         083501. https://doi.org/10.1088/0965-0393/23/8/083501.
 
     """
-    outer_shape = list(q1.shape[:-1])
+    # outer_shape = list(q1.shape[:-1])
 
     s1, v1 = q1[..., 0], q1[..., 1:]
     s2, v2 = q2[..., 0], q2[..., 1:]
@@ -326,12 +326,12 @@ def compute_misorientation_matrix_damask(quat_comps, degrees=False, quiet=False)
             f"Finding misorientation for orientation {idx + 1}/{len(all_oris)}",
             flush=True,
         )
-        ori_i = all_oris[idx : idx + 1]
-        other_oris = all_oris[idx + 1 :]
+        ori_i = all_oris[idx:idx + 1]
+        other_oris = all_oris[idx + 1:]
         if other_oris.size:
             disori_i = ori_i.disorientation(other_oris).as_axis_angle()[..., -1]
-            misori_matrix[idx, idx + 1 :] = disori_i
-            misori_matrix[idx + 1 :, idx] = disori_i
+            misori_matrix[idx, idx + 1:] = disori_i
+            misori_matrix[idx + 1:, idx] = disori_i
 
     if degrees:
         misori_matrix = np.rad2deg(misori_matrix)

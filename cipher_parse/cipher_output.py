@@ -1,11 +1,6 @@
-import copy
 import json
-import shutil
-from subprocess import run, PIPE
 from pathlib import Path
 import re
-import os
-from textwrap import dedent
 
 import numpy as np
 import pyvista as pv
@@ -13,7 +8,7 @@ import pandas as pd
 import plotly.express as px
 import zarr
 
-from cipher_parse.cipher_input import CIPHERInput, decompress_1D_array_string
+from cipher_parse.cipher_input import CIPHERInput
 from cipher_parse.geometry import CIPHERGeometry
 from cipher_parse.utilities import (
     get_subset_indices,
@@ -753,7 +748,7 @@ class CIPHEROutput:
         max_phase_size = df.phase_size.max()
 
         if num_bins is not None and bin_size is not None:
-            raise TypeError(f"Specify exactly one of `num_bins` and `bin_size`.")
+            raise TypeError("Specify exactly one of `num_bins` and `bin_size`.")
         elif num_bins is None and bin_size is None:
             num_bins = 50
 
@@ -933,7 +928,7 @@ class CIPHEROutput:
                 max_misori = max_misori_i
 
         if num_bins is not None and bin_size is not None:
-            raise TypeError(f"Specify exactly one of `num_bins` and `bin_size`.")
+            raise TypeError("Specify exactly one of `num_bins` and `bin_size`.")
         elif num_bins is None and bin_size is None:
             num_bins = 50
 
