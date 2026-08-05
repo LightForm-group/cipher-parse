@@ -1,31 +1,60 @@
-[tool.poetry]
+[project]
 name = "cipher-parse"
 version = "0.6.0a1"
 description = "Pre- and post-processing for the phase-field code CIPHER."
-authors = ["aplowman <adam.plowman@manchester.ac.uk>"]
 license = "MIT"
 readme = "README.md"
+requires-python = ">= 3.11"
+dependencies = [
+    "numpy>=2",
+    "ruamel.yaml>=0.19,<1",
+    "damask==3.0.0-alpha.7post0",
+    "plotly>=5.9.0",
+    "vecmaths>=0.1.6,<0.2",
+    "nbformat>=5.4.0,<6",
+    "itkwidgets>=0.25.2",
+    "pandas>=2",
+    "parse>=1.19.0,<2",
+    "ipywidgets<8.0.0",
+    "trame>=3.0.0",
+    "defdap>=1.0.0",
+    "zarr>=2.16.0",
+    "pyvista[all]>=0.43.4"
+]
+authors = [
+    {name = "Adam Plowman", email = "adam.plowman@manchester.ac.uk"}
+]
+maintainers = [
+    {name = "Donal Fellows", email = "donal.k.fellows@manchester.ac.uk"}
+]
+
+[project.optional-dependencies]
+hickle = ["hickle"]
+matflow = ["hickle", "matflow", "sqlalchemy"]
+notebook = ["notebook"]
+
+[tool.poetry]
 include = [
     "cipher_parse/example_data/dream3d/2D/synthetic_d3d.dream3d",
     "cipher_parse/example_data/dream3d/3D/synthetic_d3d.dream3d",
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.11"
-numpy = "<2"
-"ruamel.yaml" = "^0.17.21"
+python = ">=3.11,<4"
+numpy = ">=2"
+"ruamel.yaml" = "^0.19"
 damask = "3.0.0-alpha.7post0"
-plotly = "^5.9.0"
+plotly = ">=5.9.0"
 vecmaths = "^0.1.6"
 nbformat = "^5.4.0"
 itkwidgets = ">=0.25.2"
 notebook = {version = "^6.5.1", optional = true}
-pandas = "^1.5.1"
-parse = "^1.19.0"
+pandas = ">=2"
+parse = ">=1.19.0,<2"
 ipywidgets = "<8.0.0"
-trame = "^2.4.2"
-defdap = "^0.93.5"
-zarr = "^2.16.0"
+trame = ">=3.0.0"
+defdap = ">=1.0.0"
+zarr = ">=2.16.0"
 pyvista = {extras = ["all", "trame"], version = "^0.43.4"}
 
 [tool.poetry.group.dev.dependencies]
@@ -40,16 +69,11 @@ sphinx-jinja = "^2.0.1"
 sphinx-copybutton = "^0.5.0"
 black = "^22.3.0"
 
-[tool.poetry.extras]
-hickle = ["hickle"]
-matflow = ["hickle", "matflow", "sqlalchemy"]
-notebook = ["notebook"]
-
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "0.6.0a1"
 tag_format = "v$version"
-version_files = [ 
+version_files = [
     "pyproject.toml:version",
     "cipher_parse/_version.py"
 ]
@@ -57,6 +81,9 @@ bump_message = "bump: $current_version → $new_version [skip ci]"
 
 [tool.black]
 line-length = 90
+
+[tool.flake8]
+max-line-length = 90
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
